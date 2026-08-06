@@ -30,6 +30,13 @@ struct QiApp: App {
     }
     .windowStyle(.hiddenTitleBar)
     .defaultSize(width: 1240, height: 880)
+    .commands {
+      // Under the app menu, where every Mac app puts it. Sparkle checks daily
+      // on its own; this is for the person who wants to ask.
+      CommandGroup(after: .appInfo) {
+        Button("Check for Updates…") { Updates.shared.checkNow() }
+      }
+    }
   }
 }
 
@@ -42,6 +49,12 @@ struct QiApp: App {
  */
 final class AppDelegate: NSObject, NSApplicationDelegate {
   func applicationDidFinishLaunching(_ notification: Notification) {
+    // Sparkle's scheduled check runs on its own timetable from here. It does
+    // not fire on a first launch, which is the behaviour we want: someone who
+    // has just opened the app is in the middle of a 2.5 GB weight download and
+    // does not need a second one proposed to them.
+    Updates.shared.begin()
+
     NSApp.setActivationPolicy(.regular)
     NSApp.activate(ignoringOtherApps: true)
     // The window is styled once it exists. Doing this in `applicationDidFinishLaunching`

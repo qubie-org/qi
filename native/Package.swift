@@ -9,9 +9,16 @@ import PackageDescription
 let package = Package(
   name: "qi",
   platforms: [.macOS(.v15)],
+  dependencies: [
+    // Updates. The alternative to a framework here is telling people to
+    // download a 140 MB app again by hand every time, which is the same as
+    // saying they will not.
+    .package(url: "https://github.com/sparkle-project/Sparkle", from: "2.9.0")
+  ],
   targets: [
     .executableTarget(
       name: "qi",
+      dependencies: [.product(name: "Sparkle", package: "Sparkle")],
       swiftSettings: [
         // SE-0466: everything in this module is @MainActor unless it says
         // otherwise. The whole module is a window and a web view, so the

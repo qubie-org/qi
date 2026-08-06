@@ -130,6 +130,22 @@ CLOSURE
   echo "── bundled llama-server + $(ls "$app/Contents/Frameworks" | grep -c dylib) dylibs ($(du -sh "$app/Contents/Frameworks" | cut -f1))"
 fi
 
+# ── updates ────────────────────────────────────────────────────────────────
+# Sparkle is a framework with its own bundled XPC services and nibs, not a
+# static library, so the binary links it at @rpath and the framework has to be
+# here for the app to launch at all. SwiftPM builds it but has no concept of a
+# bundle to put it in — that is this script's job, like everything else here.
+sparkle="$(find "$here/.build" -maxdepth 4 -name 'Sparkle.framework' -type d | head -1)"
+if [ -n "$sparkle" ]; then
+  mkdir -p "$app/Contents/Frameworks"
+  cp -R "$sparkle" "$app/Contents/Frameworks/"
+  # The executable looks in Frameworks/ for it, same as for the model server's
+  # dylibs. Without the rpath the app dies at launch with a dyld error naming a
+  # path that was never going to exist.
+  install_name_tool -add_rpath "@executable_path/../Frameworks" "$app/Contents/MacOS/qi" 2>/dev/null || true
+  echo "── bundled Sparkle ($(du -sh "$sparkle" | cut -f1))"
+fi
+
 # ── the weights ─────────────────────────────────────────────────────────────
 # Everything, in the bundle. No runtime downloads: an app that fetches two and a
 # half gigabytes the first time it is opened is an app that does not work on the
