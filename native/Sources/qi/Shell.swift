@@ -125,20 +125,21 @@ private struct Web: NSViewRepresentable {
       // happening.
       try? Serve.shared.start()
 
-      // Completeness, not presence. `Packs.directory` answers "is there a
-      // folder", and after a cancelled download there is — containing four
-      // part-files and no model. Asking the wrong question here left the
-      // installer unrun and the app permanently half-installed.
-      if Install.shared.complete(byId: "core") {
-        Model.shared.start()
-      } else {
-        Task.detached {
-          await Install.shared.ensure()
-          // Only once the weights are actually here. Starting the server on a
-          // half-downloaded file is how you get an error about a corrupt GGUF
-          // that is really an error about timing.
-          if Install.shared.complete(byId: "core") { await MainActor.run { Model.shared.start() } }
-        }
+      // The installer always runs, and it is not gated on the core pack.
+      //
+      // It was, and that made "has the first run finished" mean "is the core
+      // model here" — so an install that already had core would never fetch
+      // anything else. A pack added in a later version, or one whose download
+      // failed while core succeeded, simply never arrived, and the app ran
+      // without it forever. `ensure` skips what is already complete, so there
+      // is nothing to gate: asking it every launch is both correct and cheap.
+      if Install.shared.complete(byId: "core") { Model.shared.start() }
+      Task.detached {
+        await Install.shared.ensure()
+        // Only once the weights are actually here. Starting the server on a
+        // half-downloaded file is how you get an error about a corrupt GGUF
+        // that is really an error about timing.
+        if Install.shared.complete(byId: "core") { await MainActor.run { Model.shared.start() } }
       }
 
       if Serve.shared.port != 0 { return URL(string: Serve.shared.origin)! }

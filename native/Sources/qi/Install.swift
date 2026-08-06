@@ -53,7 +53,7 @@ nonisolated final class Install: @unchecked Sendable {
   /// Where our own converted artefacts live, since HF does not host them.
   /// The activated adapters were produced by a local conversion; there is no
   /// upstream to mirror, so they travel with the release that needs them.
-  static let releases = "https://github.com/shinyobjectz/qi/releases/download"
+  static let releases = "https://github.com/qubie-org/qi/releases/download"
   static let releaseTag = "weights-v1"
 
   func state(of pack: String) -> State {
