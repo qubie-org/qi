@@ -1,0 +1,7 @@
+node_modules/
+dist/
+models/
+public/models/supra
+public/models/needle
+tools/out/
+*.part

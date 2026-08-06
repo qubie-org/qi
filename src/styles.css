@@ -1,0 +1,457 @@
+/* Registered so the theme engine can *transition* the gradient, not snap it.
+   Plain custom properties are untyped strings and refuse to interpolate. */
+@property --bg-a { syntax: '<color>'; inherits: true; initial-value: #fbfbfc }
+@property --bg-b { syntax: '<color>'; inherits: true; initial-value: #f4f5f7 }
+@property --accent { syntax: '<color>'; inherits: true; initial-value: #2b6cf5 }
+@property --accent-2 { syntax: '<color>'; inherits: true; initial-value: #f5b52b }
+
+:root {
+  --paper: #fff;
+  --ink: #0d0d0f;
+  --ink-soft: #a3a3ab;      /* the user's own voice */
+  --agent-weight: 700;
+  --agent-tracking: -0.035em;
+  --agent-size: 5.4rem;
+  --motion: 1;              /* energy multiplier; theme engine drives it */
+
+  color-scheme: light;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+*, *::before, *::after { box-sizing: border-box }
+
+/* min-height, never height: pinning these to the viewport makes the document
+   unscrollable, and a flex-end stage then pushes older turns off the top where
+   they cannot be reached. */
+html, body { min-height: 100% }
+#root { min-height: 100% }
+
+body {
+  margin: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: 'Inter var', Inter, -apple-system, BlinkMacSystemFont, 'Helvetica Neue', Arial, sans-serif;
+  font-variant-ligatures: common-ligatures contextual;
+}
+
+/* Everything white. The only colour in the room is in the type. */
+.bg {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(120% 92% at 14% 6%,  var(--bg-b), transparent 58%),
+    radial-gradient(105% 85% at 86% 96%, var(--bg-a), transparent 60%),
+    var(--paper);
+  transition: --bg-a 1400ms cubic-bezier(.22,1,.36,1), --bg-b 1400ms cubic-bezier(.22,1,.36,1);
+}
+
+.stage {
+  position: relative;
+  z-index: 1;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  gap: clamp(1.6rem, 4vh, 3.4rem);
+  padding: clamp(1.5rem, 5vw, 5rem);
+  padding-bottom: clamp(8rem, 16vh, 11rem);
+  max-width: 1240px;
+  margin: 0 auto;
+}
+
+/* Bottom-aligns the conversation without flex-end — overflow then grows
+   downward into scrollable space instead of off the unreachable top edge. */
+.stage > .turn:first-of-type { margin-top: auto }
+
+/* ── the river ─────────────────────────────────────────────────────────────
+   One flow. No block children are ever emitted into it — see inline/Render. */
+.river {
+  margin: 0;
+  line-height: 1.04;
+  text-wrap: pretty;
+  hyphens: none;
+  /* A measure, not a container width. Display type wants ~28 characters a
+     line — the references break every 4–5 words, not every 19. */
+  max-width: 26ch;
+  /* Nothing — not a URL, not an identifier — may push past the measure. */
+  overflow-wrap: anywhere;
+}
+
+.turn-agent .river {
+  font-size: clamp(1.45rem, 3.4vw, var(--agent-size));
+  font-weight: var(--agent-weight);
+  letter-spacing: var(--agent-tracking);
+  line-height: 1.08;
+  color: var(--ink);
+  transition: font-weight 700ms ease, letter-spacing 700ms ease, --accent 900ms ease;
+}
+
+
+.turn-user .river {
+  max-width: 38ch; /* secondary voice, so it may run a little longer */
+  font-size: clamp(1.05rem, 2.4vw, 1.65rem);
+  font-weight: 300;
+  letter-spacing: -0.018em;
+  line-height: 1.14;
+  color: var(--ink-soft);
+}
+
+/* ── streaming ─────────────────────────────────────────────────────────────
+   Each word animates once, on mount. Keys are positional, so React only mounts
+   words that are genuinely new and the settled part of the line never moves. */
+.i-word {
+  display: inline-block;
+  animation: wordIn 320ms cubic-bezier(.22, 1, .36, 1) both;
+}
+@keyframes wordIn {
+  from { opacity: 0; transform: translateY(.14em); filter: blur(3px) }
+  to   { opacity: 1; transform: none;              filter: none }
+}
+
+/* Sits on the baseline after the last word rather than on the block, so it
+   follows the text instead of pinning to the corner. */
+.i-caret {
+  display: inline-block;
+  width: .055em;
+  height: .74em;
+  margin-left: .07em;
+  vertical-align: -.02em;
+  background: var(--accent);
+  animation: blink 1.1s steps(2, start) infinite;
+}
+@keyframes blink { to { visibility: hidden } }
+
+@media (prefers-reduced-motion: reduce) {
+  .i-word { animation: none }
+  .i-caret { animation: none }
+}
+
+/* ── inline atoms ─────────────────────────────────────────────────────────── */
+.i-em { font-style: italic }
+.i-strong { font-weight: 900 }
+.i-strike { text-decoration: line-through; text-decoration-thickness: .06em }
+.i-code {
+  font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+  font-size: .82em;
+  font-weight: 500;
+  letter-spacing: -.01em;
+  padding: 0 .18em;
+}
+.i-link {
+  color: inherit;
+  text-decoration: none;
+  background-image: linear-gradient(var(--accent), var(--accent));
+  background-size: 100% .06em;
+  background-position: 0 92%;
+  background-repeat: no-repeat;
+}
+.i-loud { font-weight: 900; letter-spacing: -.05em }
+/* A coloured word takes its tone from the theme's word zone. */
+.i-color { color: var(--tone, var(--t1, var(--accent))) }
+
+/* ── sub-content ────────────────────────────────────────────────────────────
+   Everything that supports the sentence rather than being it — list items,
+   quotations, link rows — sits a clear step below the voice. Display size is
+   for the thing being said; at full size a five-item list owns the screen and
+   nothing reads as subordinate to anything else. */
+.i-sub-content,
+.i-item {
+  font-size: .62em;
+  line-height: 1.2;
+  letter-spacing: -.015em;
+}
+
+.i-item {
+  display: inline-block;
+  width: 100%;
+  /* Hanging indent: the marker sits in the gutter, wrapped lines align to the
+     text above them instead of running back to the margin. */
+  padding-left: 1.5em;
+  text-indent: -1.5em;
+}
+.i-item + .i-item { margin-top: .22em }
+
+/* An ordering marker. Small and set back, so the item reads before the label
+   does — and never wide enough to look like a list gutter. */
+.i-marker {
+  display: inline-block;
+  min-width: 1.1em;
+  color: var(--accent);
+  font-size: .58em;
+  font-weight: 600;
+  letter-spacing: 0;
+  vertical-align: .26em;
+  margin-right: .3em;
+  font-variant-numeric: tabular-nums;
+}
+
+/* A break in the river is a breath, not a paragraph: no margin box, just flow. */
+.i-brk { display: block; height: 0 }
+
+/* Decorations belong to the line box, not to an overlay.
+   An absolutely-positioned SVG inside a `position: relative` *inline* element
+   resolves against the union of that element's fragment boxes, which browsers
+   compute inconsistently — so it lands off-register, and since nothing clips it
+   it draws straight through the line above. Backgrounds and text-decoration are
+   painted per line fragment: they cannot drift and cannot escape their line. */
+.i-deco { display: inline }
+
+/* Drawn as a background so it can animate its width on entry, wrap correctly
+   across lines, and take its colour from the live theme. */
+.i-deco--underline {
+  background-image: linear-gradient(var(--tone, var(--t3, var(--accent))), var(--tone, var(--t3, var(--accent))));
+  background-repeat: no-repeat;
+  background-position: 0 96%;
+  background-size: 0% .1em;
+  padding-bottom: .06em;
+}
+
+
+/* Motifs ride the baseline. Height in em so they scale with whatever they sit in. */
+.i-motif {
+  display: inline-block;
+  height: .78em;
+  width: auto;
+  vertical-align: -.06em;
+  margin: 0 .12em;
+  overflow: visible;
+}
+.i-motif--wide { height: .52em }
+
+/* Emoji ride the line like any other glyph — slightly under cap height so they
+   sit with the text rather than on top of it. */
+.i-emoji {
+  display: inline-block;
+  font-size: .74em;
+  line-height: 1;
+  vertical-align: .02em;
+  margin: 0 .1em;
+  font-family: 'Apple Color Emoji', 'Segoe UI Emoji', 'Noto Color Emoji', sans-serif;
+}
+
+/* img5: pictures that live *in* the sentence, never above or below it. */
+.i-chip {
+  display: inline-block;
+  height: .92em;
+  vertical-align: -.14em;
+  margin: 0 .14em;
+  border-radius: .18em;
+  object-fit: cover;
+  aspect-ratio: 3 / 4;
+}
+.i-chip--wide { aspect-ratio: 16 / 9; border-radius: .28em }
+
+/* The substituted character (img4) — the glyph is replaced, spacing preserved. */
+.i-sub { display: inline-block; position: relative }
+.i-sub > .i-motif { margin: 0 .02em }
+
+.i-hl {
+  background-image: linear-gradient(var(--accent-2), var(--accent-2));
+  background-repeat: no-repeat;
+  background-position: 0 88%;
+  background-size: 0% .34em;
+  padding: 0 .04em;
+}
+
+/* Where the grounded value lands. It is data, not model prose. */
+.i-fact { color: var(--accent); font-variant-numeric: tabular-nums lining-nums }
+.i-src {
+  display: inline-block;
+  font-size: .30em;
+  font-weight: 500;
+  letter-spacing: 0;
+  vertical-align: .55em;
+  padding: .28em .7em;
+  margin-left: .3em;
+  border: 1px solid color-mix(in oklch, var(--ink) 18%, transparent);
+  border-radius: 10em;
+  color: color-mix(in oklch, var(--ink) 55%, transparent);
+  white-space: nowrap;
+}
+
+/* A quotation is someone else speaking, so it is set smaller and set back. */
+.i-quote {
+  font-size: .62em;
+  line-height: 1.24;
+  padding-left: .6em;
+  border-left: .1em solid color-mix(in oklch, var(--ink) 16%, transparent);
+  color: color-mix(in oklch, var(--ink) 78%, transparent);
+}
+
+/* ── composer ─────────────────────────────────────────────────────────────── */
+.composer {
+  position: fixed;
+  left: 0; right: 0; bottom: 0;
+  z-index: 2;
+  padding: clamp(1rem, 3vw, 2rem) clamp(1.5rem, 5vw, 5rem);
+  display: flex;
+  justify-content: center;
+  background: linear-gradient(to top, var(--paper) 42%, transparent);
+}
+.composer input {
+  width: 100%;
+  max-width: 1240px;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  font: inherit;
+  font-size: clamp(1.3rem, 3.3vw, 2.35rem);
+  font-weight: 300;
+  letter-spacing: -.018em;
+  color: var(--ink-soft);
+  caret-color: var(--accent);
+}
+.composer input::placeholder { color: color-mix(in oklch, var(--ink-soft) 45%, transparent) }
+
+.status {
+  position: fixed;
+  top: clamp(1rem, 3vw, 2rem);
+  right: clamp(1.5rem, 5vw, 5rem);
+  z-index: 3;
+  font-size: .72rem;
+  font-weight: 500;
+  letter-spacing: .02em;
+  color: color-mix(in oklch, var(--ink) 40%, transparent);
+  font-variant-numeric: tabular-nums;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { transition-duration: 1ms !important; animation-duration: 1ms !important }
+}
+
+/* An open slot the resolver hasn't filled yet — visible, because a step that
+   silently vanished would be worse than one that shows its intent. */
+.i-slot--open {
+  color: color-mix(in oklch, var(--ink) 42%, transparent);
+  border-bottom: 1px dashed color-mix(in oklch, var(--accent) 55%, transparent);
+}
+
+/* An address inside toki, not out on the web. Marked with a leading dot so a
+   link that navigates is distinguishable from one that leaves. */
+.i-link--internal {
+  cursor: pointer;
+  background-image: linear-gradient(var(--t2, var(--accent)), var(--t2, var(--accent)));
+  background-size: 100% .05em;
+}
+.i-link--internal::before {
+  content: '';
+  display: inline-block;
+  width: .22em;
+  height: .22em;
+  margin-right: .18em;
+  vertical-align: .22em;
+  border-radius: 50%;
+  background: var(--t2, var(--accent));
+}
+
+/* Chips are addresses too — clicking one opens its page. */
+.i-chip { cursor: pointer }
+
+/* ── image composition ──────────────────────────────────────────────────────
+   The class picks a *treatment* — how large, and whether text sets around it.
+   It never picks proportions: `aspect-ratio` comes from the source's real
+   pixels, set inline. Hardcoding 16/10 here squashed a 3:2 photograph into the
+   wrong box and made every picture the same shape, which was the whole
+   complaint. */
+
+/* Square-ish or unsupported by the text: a glyph that happens to be a photo. */
+.i-chip--inline {
+  height: 1.15em;
+  vertical-align: -.22em;
+  border-radius: .16em;
+}
+
+/* Landscape, with enough text to flow beside it. */
+.i-chip--wide {
+  float: left;
+  height: 2.6em;
+  margin: .12em .5em .12em 0;
+  border-radius: .2em;
+  shape-outside: margin-box;
+}
+
+/* Portrait: taller than the line, text wraps down its side. */
+.i-chip--tall {
+  float: right;
+  height: 3.4em;
+  margin: .12em 0 .2em .55em;
+  border-radius: .2em;
+  shape-outside: margin-box;
+}
+
+/* Panorama: nothing sits beside it sensibly, so it takes the measure. */
+.i-chip--band {
+  display: block;
+  width: 100%;
+  height: auto;
+  margin: .34em 0;
+  border-radius: .24em;
+}
+
+/* A float must not bleed into the next turn. */
+.turn-agent .river::after { content: ''; display: block; clear: both }
+
+/* ── steps ──────────────────────────────────────────────────────────────────
+   When a turn takes several moves, this row is the account of them. It sits
+   above the answer and is deliberately quiet: the answer is the display type
+   below, and a step row that competes with it has confused the work with the
+   result. Same .62em step-down as lists and other sub-content, so the page
+   still has exactly two sizes and nothing invents a third. */
+.steps { margin: 0 0 .55rem; font-size: .62em }
+
+.steps-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: .3rem .4rem;
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: .3em;
+  padding: .24em .62em .24em .5em;
+  border-radius: 999px;
+  border: 1px solid color-mix(in oklch, currentColor 14%, transparent);
+  background: color-mix(in oklch, canvas 92%, transparent);
+  color: color-mix(in oklch, currentColor 62%, transparent);
+  letter-spacing: -.01em;
+  white-space: nowrap;
+  /* Steps arrive already animated by anime.js; this only covers the change of
+     state from running to done, which happens on an element already on screen. */
+  transition: color .3s ease, border-color .3s ease, opacity .3s ease;
+}
+
+.badge-glyph { width: .85em; height: .85em; flex: none; overflow: visible }
+
+/* A step still running is dimmer and breathes, so the row reads as in-progress
+   without a spinner anywhere. It settles to full contrast when it resolves. */
+.badge-running {
+  opacity: .62;
+  animation: badge-pulse 1.5s ease-in-out infinite;
+}
+.badge-done { color: color-mix(in oklch, currentColor 78%, transparent) }
+/* A failed step is kept, not hidden. A turn that tried something and got
+   nothing is a different answer from one that never tried, and the reader is
+   entitled to tell them apart. */
+.badge-failed { opacity: .45; text-decoration: line-through }
+
+@keyframes badge-pulse {
+  0%, 100% { opacity: .62 }
+  50%      { opacity: .95 }
+}
+
+/* First person, present tense, written by the summariser from what actually
+   happened. This is the line that makes waiting read as continuation. */
+.steps-status {
+  margin-top: .34rem;
+  opacity: .5;
+  font-style: italic;
+  letter-spacing: -.01em;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .badge-running { animation: none }
+}

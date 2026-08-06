@@ -1,0 +1,37 @@
+{
+  "name": "toki",
+  "module": "index.ts",
+  "type": "module",
+  "private": true,
+  "devDependencies": {
+    "@types/bun": "latest",
+    "@types/react": "^19.2.18",
+    "@types/react-dom": "^19.2.4",
+    "@vitejs/plugin-react": "^6.0.5",
+    "vite": "^8.2.0"
+  },
+  "peerDependencies": {
+    "typescript": "^7.0.2"
+  },
+  "dependencies": {
+    "@sqlite.org/sqlite-wasm": "^3.53.0-build1",
+    "@wasmer/sdk": "^0.10.0",
+    "@wllama/wllama": "^3.5.1",
+    "animejs": "^4.5.0",
+    "emojibase": "^17.0.0",
+    "emojibase-data": "^17.0.0",
+    "onnxruntime-web": "^1.27.0",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8",
+    "valibot": "^1.4.2"
+  },
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "preview": "vite preview",
+    "fetch": "bash tools/fetch.sh",
+    "pack": "python3 tools/pack_potion.py",
+    "probe": "python3 tools/probe_endpoints.py",
+    "test": "bun src/inline/__tests__/smoke.ts && bun src/engine/__tests__/embed.ts && bun src/engine/__tests__/place.ts"
+  }
+}
