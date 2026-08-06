@@ -25,9 +25,8 @@
 import { useEffect, useRef } from 'react'
 import { animate, stagger } from 'animejs'
 import type { StepEvent } from './loop'
-import type { ToolName } from './tools'
 import { explain, type Bank } from '../engine/place'
-import type { Table } from '../engine/embed'
+import { sound } from '../engine/sound'
 import type { MotifKind } from '../inline/types'
 
 export type Badge = StepEvent & { motif: MotifKind | null; tone: number }
@@ -44,12 +43,21 @@ export type Badge = StepEvent & { motif: MotifKind | null; tone: number }
  * The glyph is not fixed. It comes from embedding the step's subject against
  * the same motif bank the reply's words are scored on, so a step about a
  * journey draws an arrow and a step about a place draws a dot — decided the
- * same way, by the same table, as everything else on the page.
+ * same way, by the same model, as everything else on the page.
+ *
+ * Async because `explain` is: a step's subject is usually a phrase nobody has
+ * typed before, so it is nearly always a cache miss, and a badge can afford to
+ * wait for its glyph in a way that a paint cannot.
  */
-const TONE: Record<ToolName, number> = { look: 0, do: 1, open: 2, recall: 3 }
+/**
+ * Tone per verb, so a run of steps reads as a palette rather than a stripe.
+ * Pack verbs are not listed and fall through to 0 — a colour they share with
+ * `look`, which is the right family for anything that fetches.
+ */
+const TONE: Record<string, number> = { look: 0, do: 1, open: 2, recall: 3 }
 
-export function badgeFor(e: StepEvent, t: Table, bank: Bank): Badge {
-  const hits = e.subject ? explain(e.subject, t, bank) : []
+export async function badgeFor(e: StepEvent, bank: Bank): Promise<Badge> {
+  const hits = e.subject ? await explain(e.subject, bank) : []
   const best = hits[0]
   return {
     ...e,
@@ -88,6 +96,8 @@ export function Steps({ badges, status }: { badges: Badge[]; status: string | nu
     const items = Array.from(el.querySelectorAll<HTMLElement>('.badge')).slice(seen.current)
     if (!items.length) return
     seen.current += items.length
+    // One tick per badge that actually just arrived, staggered with it.
+    items.forEach((_, i) => window.setTimeout(() => sound('step'), i * 45))
     animate(items, {
       opacity: [0, 1],
       translateY: [6, 0],

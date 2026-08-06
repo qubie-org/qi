@@ -1,15 +1,21 @@
 /**
- * The compressor: SupraLabs' reasoning-summarizer, 800M, on its own server.
+ * The compressor.
  *
  * Two problems share one answer. Tool results are large — a weather payload is
  * a quarter of a megabyte before the sandbox reduces it, and a page body is
  * still a paragraph after — and putting them into the agent's context is what
- * makes a 4B model lose the thread. Separately, the step badges need a human
+ * makes a small model lose the thread. Separately, the step badges need a human
  * label for work that is described in the code only as `look('reykjavik
  * weather')`.
  *
- * This model produces both at once. It is a Qwen3.5-0.8B base fine-tuned on
- * 61k reasoning-trace summaries, and it emits four fields:
+ * This used to be a second model: an 800M summariser on its own port, with its
+ * own ChatML template and its own quirks. It is gone. What it was actually
+ * providing was a guaranteed shape, and the shape comes from the grammar, not
+ * from the weights — llama.cpp compiles a JSON schema to GBNF and constrains
+ * sampling with it, so the core model cannot emit a malformed note however
+ * small a slice of its attention this task gets.
+ *
+ * Four fields, one call:
  *
  *   title      two or three words          → the badge caption
  *   sub_title  one line, what it did       → the badge's detail on hover
@@ -34,17 +40,38 @@
  *    here instead.
  */
 
-const ENDPOINT = '/sum/v1/completions'
+import { granite } from '../model/granite'
 
 /**
- * Being explicit about English is not optional: the base model is multilingual
- * and, undirected, ends a sentence about Iceland in Chinese. The second clause
- * is the one that matters — a summariser that invents a number is worse than no
- * summariser, because its output is trusted downstream as fact.
+ * The second clause is the load-bearing one: a summariser that invents a number
+ * is worse than no summariser, because its output is trusted downstream as
+ * fact — it is the only thing about a step that reaches the agent's context.
  */
-const SYSTEM =
-  'Summarise the work below in English only. Be literal: never state a number ' +
-  'that does not appear in the text.'
+/**
+ * Written as a job description, not as an instruction to follow.
+ *
+ * The previous version opened "Summarise the work below…" and the model
+ * summarised *the instruction*: the badge came back titled "Summarisation" and
+ * cur_task read "I write the summary in the past tense and present tense
+ * respectively." Grammar-constrained, correctly shaped, and about nothing.
+ *
+ * Two changes fixed it, and both were needed. Telling it what it *is* ("you
+ * label work that has already happened") rather than what to do, and marking
+ * the input as a result rather than letting it arrive as a bare user turn —
+ * without the marker the model still drifted into describing the photograph
+ * instead of the step.
+ */
+const SYSTEM = [
+  'You label work that has already happened. Never restate these instructions.',
+  'title: two or three words naming the thing found.',
+  'sub_title: one short line about it.',
+  'summary: one past-tense sentence of what happened.',
+  'cur_task: first person present, what is being done now.',
+  'English only. Never state a number that is not in the input.',
+].join(' ')
+
+/** Words that only appear when the model has described the brief, not the work. */
+const ECHOED = /^(summar|label|instruct|i (write|am to|will)\b)/i
 
 const SCHEMA = {
   type: 'object',
@@ -77,33 +104,10 @@ const clip = (s: string, n: number) => {
   return `${t.slice(0, cut > n * 0.6 ? cut : n).trimEnd()}…`
 }
 
-const chatml = (user: string) =>
-  `<|im_start|>system\n${SYSTEM}<|im_end|>\n<|im_start|>user\n${user}<|im_end|>\n<|im_start|>assistant\n`
-
 export class Digest {
-  ready = false
-
-  async load(): Promise<void> {
-    const res = await fetch('/sum/health')
-    if (!res.ok) throw new Error(`no summarizer (${res.status})`)
-    this.ready = true
-  }
-
-  private async complete(prompt: string, schema: unknown, tokens: number): Promise<string> {
-    const res = await fetch(ENDPOINT, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({
-        prompt,
-        n_predict: tokens,
-        temperature: 0.1,
-        json_schema: schema,
-        stop: ['<|im_end|>'],
-      }),
-    })
-    if (!res.ok) throw new Error(`digest: ${res.status}`)
-    const body = await res.json()
-    return String(body?.choices?.[0]?.text ?? '').trim()
+  /** No weights of its own: it is ready exactly when the core model is. */
+  get ready(): boolean {
+    return granite.ready
   }
 
   /**
@@ -122,8 +126,16 @@ export class Digest {
     }
     if (!this.ready || !work.trim()) return plain
     try {
-      const raw = await this.complete(chatml(work), SCHEMA, 200)
-      const d = JSON.parse(raw) as Record<string, string>
+      const d = await granite.json<Record<string, string>>(
+        SYSTEM,
+        `WORK RESULT:\n${work}`,
+        SCHEMA,
+        200,
+      )
+      // Belt and braces. The prompt above stops this in every case measured,
+      // but a badge reading "Summarisation" is worse than one reading `look
+      // reykjavik`, so an echo falls back to what the caller already knew.
+      if (ECHOED.test(d.title ?? '')) return plain
       return {
         title: clip(d.title || fallback, 28),
         subTitle: clip(d.sub_title || '', 70),
@@ -148,13 +160,13 @@ export class Digest {
     if (!this.ready || !turns.length) return null
     const script = turns.map((t) => `${t.role}: ${t.text}`).join('\n')
     try {
-      const raw = await this.complete(
-        chatml(`A conversation so far:\n${script}\n\nState what it is about.`),
+      const { summary } = await granite.json<{ summary?: string }>(
+        SYSTEM,
+        `CONVERSATION:\n${script}\n\nState what it is about.`,
         { type: 'object', properties: { summary: { type: 'string' } }, required: ['summary'] },
         90,
       )
-      const s = (JSON.parse(raw) as { summary?: string }).summary
-      return s ? clip(s, 150) : null
+      return summary ? clip(summary, 150) : null
     } catch (err) {
       console.warn('topic failed', err)
       return null

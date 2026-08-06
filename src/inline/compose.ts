@@ -10,15 +10,26 @@
  * depicts, mid-sentence, the way "And [img] that pattern is simple" reads.
  * Size follows what the text can actually support.
  */
-import { cosine, embed, type Table } from '../engine/embed'
+import { cosine, known, warm } from '../model/vectors'
 import type { Node } from './types'
 
 export type Shape = 'band' | 'wide' | 'tall' | 'inline'
 
-/** Words needed before a floated picture has anything to flow around it. */
-const WORDS_FOR_FLOAT = 14
+/**
+ * Words needed before a floated picture has anything to flow around it.
+ *
+ * These were 14 and 26, which in practice meant never. qi answers in one
+ * short sentence — that is the whole voice — so a reply is eight to twelve
+ * words and every picture fell through to `inline`, a glyph the size of a
+ * capital letter. The thresholds were written for paragraphs the app does not
+ * produce.
+ *
+ * Eight words is about one line at display size, which is enough for a float to
+ * have something to be beside.
+ */
+const WORDS_FOR_FLOAT = 8
 /** Below this, even a panorama has to sit in the line. */
-const WORDS_FOR_BAND = 26
+const WORDS_FOR_BAND = 20
 
 /**
  * Pick a treatment from the picture's real shape *and* the text available.
@@ -59,7 +70,6 @@ export function countWords(nodes: Node[]): number {
 export function placeChip(
   nodes: Node[],
   chip: Extract<Node, { t: 'chip' }>,
-  t: Table,
   threshold = 0.45,
 ): Node[] {
   // A float only wraps text that comes *after* it. Dropped mid-sentence it
@@ -72,7 +82,14 @@ export function placeChip(
   }
 
   type Spot = { path: number[]; index: number; score: number }
-  const target = embed(t, chip.alt)
+  // Cache-only: a chip whose alt text is still cold goes to the end of the
+  // paragraph this pass and finds its word on the next one.
+  const target = known(chip.alt)
+  if (!target) {
+    warm([chip.alt])
+    return [...nodes, chip]
+  }
+  const cold: string[] = []
 
   // Collected and reduced rather than assigned inside the closure: TypeScript
   // cannot see writes through a callback, and narrows the captured variable to
@@ -84,7 +101,12 @@ export function placeChip(
         node.v.split(/(\s+)/).forEach((word, j) => {
           const clean = word.toLowerCase().replace(/[^a-z'-]/g, '')
           if (clean.length < 4) return
-          spots.push({ path: [...path, i], index: j, score: cosine(target, embed(t, clean)) })
+          const vec = known(clean)
+          if (!vec) {
+            cold.push(clean)
+            return
+          }
+          spots.push({ path: [...path, i], index: j, score: cosine(target, vec) })
         })
       } else if ('kids' in node) {
         scan(node.kids, [...path, i])
@@ -92,6 +114,7 @@ export function placeChip(
     })
   }
   scan(nodes, [])
+  if (cold.length) warm(cold)
 
   const at = spots.reduce<Spot | null>((b, s) => (!b || s.score > b.score ? s : b), null)
   if (!at || at.score < threshold) return [...nodes, chip]

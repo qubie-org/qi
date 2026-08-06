@@ -11,7 +11,7 @@ Survivors get curated into src/ground/sources.ts with a reducer apiece.
 import json, pathlib, sys, urllib.request
 from concurrent.futures import ThreadPoolExecutor
 
-ORIGIN = "https://toki.local"
+ORIGIN = "https://qi.local"
 TIMEOUT = 10
 WORKERS = 6
 
@@ -57,7 +57,7 @@ ENDPOINTS = [
 def probe(row):
     ident, purpose, url = row
     req = urllib.request.Request(
-        url, headers={"Origin": ORIGIN, "User-Agent": "toki-probe/0.1 (+grounding source check)"}
+        url, headers={"Origin": ORIGIN, "User-Agent": "qi-probe/0.1 (+grounding source check)"}
     )
     try:
         with urllib.request.urlopen(req, timeout=TIMEOUT) as resp:

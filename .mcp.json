@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "qi": {
+      "command": "node",
+      "args": ["tools/mcp-qi.mjs"],
+      "env": { "QI_CONTROL_PORT": "8777" }
+    }
+  }
+}

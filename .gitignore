@@ -5,3 +5,24 @@ public/models/supra
 public/models/needle
 tools/out/
 *.part
+
+# Generated indexes and their upstream caches. Rebuilt by tools/pack_apis.py and
+# tools/pack_emoji.py from catalogues that move, so checking them in would mean
+# a stale copy winning a merge.
+.cache-apis-guru.json
+.cache-public-apis.md
+public/apis/
+public/emoji/
+telemetry/
+packs/
+
+# Build artefacts. The DMG is 2.3 GB and the app bundle 140 MB — both are
+# outputs of native/build.sh and neither belongs in history, where they cannot
+# be removed again without rewriting it.
+dist-dmg/
+native/.build/
+native/Qi.app/
+
+# The MLX conversion, kept for comparison. 1.8 GB, reproducible in three
+# minutes with mlx_lm.convert, and slower than the GGUF it was measured against.
+packs/mlx/

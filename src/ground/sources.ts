@@ -32,7 +32,7 @@ const json = async (url: string, headers?: Record<string, string>) => {
  * earns a 429. They ask for an identifying User-Agent, which browsers refuse
  * to let scripts set, so their documented substitute is `Api-User-Agent`.
  */
-const WIKI_HEADERS = { 'Api-User-Agent': 'toki/0.1 (https://github.com/shinyobjectz/toki)' }
+const WIKI_HEADERS = { 'Api-User-Agent': 'qi/0.1 (https://github.com/shinyobjectz/qi)' }
 
 /**
  * needle's view of a source — deliberately ONE tool at a time.
@@ -110,7 +110,18 @@ export const SOURCES: Source[] = [
   {
     // The backbone: a real definition plus a picture, for almost any noun.
     id: 'wiki',
-    anchors: ['what is', 'who is', 'tell me about', 'explain', 'define', 'history of', 'meaning of'],
+    // Topics, not intents. These used to be phrasings — "what is", "tell me
+    // about" — which made the encyclopedia the nearest match for anything
+    // shaped like a question, including "tell me more" and "tell me a joke".
+    // Lookup *intent* is already matched separately by LOOKUP_FORM, on grammar
+    // rather than meaning; anchors are for what a source is about.
+    anchors: [
+      'encyclopedia article',
+      'history biography',
+      'definition of a term',
+      'famous person place or event',
+      'scientific concept explained',
+    ],
     arg: topic,
     // Direct title lookup 404s on natural phrasing more often than not, so a
     // miss falls back to search and hands the reducer a shortlist for the
@@ -168,7 +179,7 @@ export const SOURCES: Source[] = [
 
   {
     id: 'weather',
-    anchors: ['weather', 'temperature', 'how hot is it', 'how cold', 'forecast', 'raining'],
+    anchors: ['weather', 'temperature outside', 'how hot or cold it is', 'forecast', 'rain and wind'],
     arg: (t) => topic(t).replace(/^(the\s+)?weather\s+(in|at|for)\s+/i, '').trim() || 'San Francisco',
     fetch: async (a) => {
       // needle hands back natural language ("bend oregon"); the geocoder wants
@@ -214,7 +225,7 @@ export const SOURCES: Source[] = [
 
   {
     id: 'crypto',
-    anchors: ['bitcoin price', 'ethereum', 'crypto', 'how much is bitcoin', 'coin price'],
+    anchors: ['bitcoin price', 'ethereum', 'cryptocurrency', 'coin market value'],
     arg: (t) => (/eth/i.test(t) ? 'ethereum' : /sol/i.test(t) ? 'solana' : 'bitcoin'),
     fetch: (a) =>
       json(`https://api.coingecko.com/api/v3/simple/price?ids=${a}&vs_currencies=usd`),
@@ -233,9 +244,14 @@ export const SOURCES: Source[] = [
 
   {
     id: 'fx',
-    anchors: ['exchange rate', 'convert currency', 'dollars to euros', 'how many euros'],
+    anchors: ['exchange rate', 'currency conversion', 'dollars to euros'],
     arg: (t) => (t.match(/\b([A-Z]{3})\b/)?.[1] ?? 'EUR'),
-    fetch: (a) => json(`https://api.frankfurter.app/latest?from=USD&to=${a}`),
+    // `api.frankfurter.app` now answers 301 and the redirect is cross-origin,
+    // which a browser `fetch` cannot follow without CORS on the *redirect* —
+    // so every call failed with a bare "Load failed" and the question fell
+    // through to whichever source was next. That was the crypto ticker, so
+    // "dollars to euros" came back as the price of bitcoin.
+    fetch: (a) => json(`https://api.frankfurter.dev/v1/latest?base=USD&symbols=${a}`),
     reducer: `
       var k = Object.keys(data.rates || {})[0];
       if (!k || typeof data.rates[k] !== 'number') return null;
@@ -276,18 +292,42 @@ export const SOURCES: Source[] = [
     // and licence with every hit, which is the only kind of image source that
     // can be shown without lying about where it came from.
     id: 'image',
-    anchors: ['picture of', 'photo of', 'image of', 'show me what', 'what does it look like', 'photograph'],
+    anchors: ['photograph', 'a photo of an animal building or landscape', 'stock imagery'],
     arg: (t) =>
       topic(t)
         .replace(/^(show me|find me)\s+/i, '')
         .replace(/^(a|an|the)\s+/i, '')
         .replace(/^(picture|photo|image|photograph)s?\s+of\s+/i, '')
         .trim(),
-    fetch: (a) =>
-      json(
-        `https://api.openverse.org/v1/images/?q=${encodeURIComponent(a)}` +
-          `&page_size=4&mature=false&license_type=commercial,modification`,
-      ),
+    /**
+     * Widen until something comes back.
+     *
+     * Openverse ANDs every term, so a natural sentence matches nothing:
+     * "volcano" returns 240 images and "volcano erupting near the ocean at
+     * midnight" returns zero. Every picture request in the app was failing this
+     * way and falling through to whichever source answered next, which is how a
+     * request for a photograph came back as a temperature.
+     *
+     * So the query is tried whole, then progressively shortened to its first
+     * few words, then to its first. The first attempt that returns anything
+     * wins, which keeps a specific query specific and stops a long one being
+     * worth nothing at all.
+     */
+    fetch: async (a) => {
+      const words = a.split(/\s+/).filter(Boolean)
+      const tries = [words, words.slice(0, 3), words.slice(0, 2), words.slice(0, 1)]
+        .map((w) => w.join(' '))
+        .filter((q, i, all) => q && all.indexOf(q) === i)
+
+      for (const q of tries) {
+        const body = (await json(
+          `https://api.openverse.org/v1/images/?q=${encodeURIComponent(q)}` +
+            `&page_size=4&mature=false&license_type=commercial,modification`,
+        )) as { results?: unknown[] } | null
+        if (body?.results?.length) return body
+      }
+      return null
+    },
     reducer: `
       var hits = (data.results || []).filter(function (r) { return r && r.thumbnail; });
       if (!hits.length) return null;
@@ -313,7 +353,7 @@ export const SOURCES: Source[] = [
 
   {
     id: 'art',
-    anchors: ['show me art', 'painting', 'artwork', 'a picture of', 'museum'],
+    anchors: ['painting', 'artwork', 'museum collection', 'an artist and their work'],
     arg: (t) => topic(t).replace(/^(show me|a picture of)\s+/i, '').trim() || 'blue',
     fetch: (a) =>
       json(
@@ -335,7 +375,7 @@ export const SOURCES: Source[] = [
 
   {
     id: 'catfact',
-    anchors: ['cat fact', 'tell me about cats', 'something about cats'],
+    anchors: ['cats', 'a fact about cats', 'feline trivia'],
     fetch: () => json('https://catfact.ninja/fact'),
     reducer: `
       if (!data.fact) return null;
@@ -344,7 +384,7 @@ export const SOURCES: Source[] = [
 
   {
     id: 'dog',
-    anchors: ['show me a dog', 'dog picture', 'puppy photo'],
+    anchors: ['dogs', 'a breed of dog', 'puppies'],
     fetch: () => json('https://dog.ceo/api/breeds/image/random'),
     reducer: `
       if (!data.message) return null;
@@ -354,7 +394,7 @@ export const SOURCES: Source[] = [
   {
     id: 'joke',
     // No "make me laugh" — bag-of-words matches it against any "how to make…".
-    anchors: ['joke', 'funny', 'humour', 'comedy', 'pun'],
+    anchors: ['a joke', 'a pun or one-liner', 'something funny to laugh at'],
     fetch: () => json('https://official-joke-api.appspot.com/random_joke'),
     reducer: `
       if (!data.setup) return null;

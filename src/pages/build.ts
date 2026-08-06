@@ -1,12 +1,12 @@
 /**
- * Turning what toki already knows into pages.
+ * Turning what qi already knows into pages.
  *
  * Every grounded fact was already a small document — a title, a body, a source
  * and often a picture — it just had nowhere to live. Registering them as pages
  * means a fact answered once stays addressable afterwards, and a link in any
  * later reply can point back at it.
  *
- * The catalogue of sources is a page too, so `toki:sources` lists what toki can
+ * The catalogue of sources is a page too, so `qi:sources` lists what qi can
  * actually reach. Nothing here is hand-written prose; it is generated from the
  * same registry the router uses, so it cannot go stale.
  */

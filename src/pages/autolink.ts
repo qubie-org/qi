@@ -2,14 +2,14 @@
  * Making the space visible without the model having to remember it.
  *
  * Asking a language model to recall a list of addresses and spell them into
- * `[text](toki:id)` is a way to get wrong links: it will invent plausible ids
+ * `[text](qi:id)` is a way to get wrong links: it will invent plausible ids
  * the same way it invented a plausible image URL. Instead the render layer
  * links what it can *verify* exists — a word is only ever linked when a page
  * with that exact id is already registered.
  *
  * Deterministic and conservative on purpose: exact matches only, a hard cap per
  * turn, and never the same page twice. An over-linked paragraph reads like a
- * wiki stub, and toki is meant to read like a sentence.
+ * wiki stub, and qi is meant to read like a sentence.
  */
 import type { Node } from '../inline/types'
 import { address, get, slug } from './space'
@@ -18,6 +18,20 @@ import { address, get, slug } from './space'
 const MAX_LINKS = 2
 /** Short words match too eagerly and are rarely the subject. */
 const MIN_WORD = 4
+
+/**
+ * Skills are never linked from prose.
+ *
+ * Their ids are ordinary English words — weather, image, art, dog, joke — so
+ * exact-id matching turned the word "weather" in "The weather in Reykjavik is
+ * 11 °C" into a link to a tool. Clicking it opened the skill's own page, whose
+ * body is its routing anchors, and offered to run it with no argument.
+ *
+ * The mistake was treating a capability as a destination. A skill is something
+ * you *use*, not somewhere you *go*, so it does not belong in the middle of a
+ * sentence at all.
+ */
+const LINKABLE: ReadonlySet<string> = new Set(['page', 'image', 'source'])
 
 export function autolink(nodes: Node[], max = MAX_LINKS): Node[] {
   let placed = 0
@@ -37,7 +51,8 @@ export function autolink(nodes: Node[], max = MAX_LINKS): Node[] {
         for (const part of parts) {
           const bare = part.replace(/[^\p{L}\p{N}'-]/gu, '')
           const id = slug(bare)
-          const page = bare.length >= MIN_WORD && !used.has(id) ? get(id) : undefined
+          const found = bare.length >= MIN_WORD && !used.has(id) ? get(id) : undefined
+        const page = found && LINKABLE.has(found.kind) ? found : undefined
           if (!page || placed >= max) {
             buf += part
             continue

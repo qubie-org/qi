@@ -5,7 +5,7 @@ Canvas UI ships as shadcn-registry source rather than an npm package, but the
 components we want have zero dependencies and import nothing but React, so the
 CLI (and a components.json, and Tailwind) is unnecessary — fetch the files.
 
-Chosen for the art direction, not for the demo reel. toki is white, quiet, and
+Chosen for the art direction, not for the demo reel. qi is white, quiet, and
 all its contrast lives in the type; blaze / glitch / vhs / laser / shatter would
 fight that, so they are deliberately not here.
 """
@@ -27,7 +27,7 @@ out.mkdir(parents=True, exist_ok=True)
 
 def get(url: str):
     # The site 403s urllib's default agent.
-    req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0 (toki fetch)"})
+    req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0 (qi fetch)"})
     with urllib.request.urlopen(req, timeout=30) as r:
         return json.load(r)
 

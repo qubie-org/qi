@@ -10,12 +10,12 @@
  * system, the emoji, the marks and the theme for free. An app is a page that
  * also *does* something.
  *
- * Addresses look like `toki:weather` in a link href. Anything else stays an
+ * Addresses look like `qi:weather` in a link href. Anything else stays an
  * ordinary external link and opens in a new tab.
  */
-import { cosine, embedContent, type Table } from '../engine/embed'
+import { cosine, embed, nullSample } from '../model/vectors'
 
-export const SCHEME = 'toki:'
+export const SCHEME = 'qi:'
 
 export type PageKind = 'page' | 'app' | 'source' | 'image' | 'skill' | 'action'
 
@@ -40,7 +40,7 @@ let index: { id: string; vec: Float32Array }[] | null = null
 
 export function put(page: Page): Page {
   pages.set(page.id, page)
-  index = null
+  index = null; softFloor = null
   return page
 }
 
@@ -54,10 +54,10 @@ export function all(): Page[] {
 
 export function clear(): void {
   pages.clear()
-  index = null
+  index = null; softFloor = null
 }
 
-/** `toki:id` → `id`. Returns null for ordinary links. */
+/** `qi:id` → `id`. Returns null for ordinary links. */
 export function addressOf(href: string): string | null {
   if (!href.startsWith(SCHEME)) return null
   return decodeURIComponent(href.slice(SCHEME.length)).trim().toLowerCase()
@@ -84,29 +84,55 @@ export function slug(text: string): string {
  * embedded and compared against every page, which is what makes a link to
  * something merely *described* still land somewhere sensible.
  */
-export function resolve(
+/**
+ * Async, unlike the render path, and deliberately so. Resolving a name is a
+ * navigation — it happens when someone follows a link or the agent opens a
+ * page, never inside a paint — so it can afford to wait for a vector rather
+ * than miss and degrade.
+ */
+/**
+ * How well an address that means nothing matches the best page.
+ *
+ * Measured alongside the index rather than fixed, for the same reason the glyph
+ * bank measures its own: 0.55 was right for a static embedding table and
+ * meaningless for a contextual one, where it sat either side of the noise
+ * depending on the model. A description has to beat the words that describe
+ * nothing here — which is a claim that survives changing the model.
+ */
+let softFloor: number | null = null
+
+export async function resolve(
   addr: string,
-  t?: Table,
-  threshold = 0.55,
-): { page: Page; exact: boolean; score: number } | null {
+  threshold?: number,
+): Promise<{ page: Page; exact: boolean; score: number } | null> {
   const id = addr.trim().toLowerCase()
   const exact = pages.get(id) ?? pages.get(slug(id))
   if (exact) return { page: exact, exact: true, score: 1 }
-  if (!t || pages.size === 0) return null
+  if (pages.size === 0) return null
 
   if (!index) {
-    index = [...pages.values()].map((p) => ({
-      id: p.id,
-      vec: embedContent(t, `${p.title} ${p.aliases?.join(' ') ?? ''}`),
-    }))
+    const entries = [...pages.values()]
+    const vecs = await Promise.all(
+      entries.map((p) => embed(`${p.title} ${p.aliases?.join(' ') ?? ''}`)),
+    )
+    index = entries.map((p, i) => ({ id: p.id, vec: vecs[i] }))
+
+    const noise = await Promise.all(nullSample(40).map((w) => embed(w)))
+    const best = noise
+      .map((v) => Math.max(...index!.map((e) => cosine(v, e.vec))))
+      .sort((a, b) => a - b)
+    // The 90th percentile, not the maximum: one unrelated word will always
+    // happen to sit near one page, and letting that single case set the bar
+    // would make every soft match impossible.
+    softFloor = best[Math.floor(0.9 * (best.length - 1))] ?? 0.3
   }
-  const v = embedContent(t, addr)
+  const v = await embed(addr)
   let best: { id: string; score: number } | null = null
   for (const entry of index) {
     const score = cosine(v, entry.vec)
     if (!best || score > best.score) best = { id: entry.id, score }
   }
-  if (!best || best.score < threshold) return null
+  if (!best || best.score < (threshold ?? softFloor ?? 0.3)) return null
   const page = pages.get(best.id)
   return page ? { page, exact: false, score: best.score } : null
 }

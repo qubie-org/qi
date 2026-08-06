@@ -1,7 +1,7 @@
 /**
  * The block killer.
  *
- * Models emit CommonMark whether you ask them to or not. toki has no block
+ * Models emit CommonMark whether you ask them to or not. qi has no block
  * boxes at all — no headings, no lists, no fences, no tables, no paragraphs —
  * so every block construct is folded back into the single river of text
  * *before* the inline parser ever sees it. Nothing is dropped; it changes

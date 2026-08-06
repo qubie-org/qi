@@ -87,8 +87,11 @@ export function tokensFor(v: Vibe): Record<string, string> {
     '--bg-b': 'oklch(98.2% 0.002 260)',
 
     // Voice.
-    '--agent-weight': String(Math.round(mix(560, 880, energy * 0.6 + gravity * 0.4))),
-    '--agent-tracking': `${mix(-0.018, -0.05, energy * 0.5 + gravity * 0.5).toFixed(4)}em`,
+    // A serif carries its weight in the letterforms, so the range that used to
+    // run 560–880 now runs where a display serif actually looks composed. The
+    // top of the old range was a headline shouting; nothing needs that.
+    '--agent-weight': String(Math.round(mix(380, 580, energy * 0.6 + gravity * 0.4))),
+    '--agent-tracking': `${mix(-0.004, -0.022, energy * 0.5 + gravity * 0.5).toFixed(4)}em`,
     '--agent-size': `${mix(2.4, 3.2, energy * 0.7 - gravity * 0.3).toFixed(2)}rem`,
     '--motion': mix(0.72, 1.5, energy).toFixed(3),
   }

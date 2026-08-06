@@ -14,11 +14,8 @@
  *
  *   bun src/agent/__tests__/loop.ts     (needs tools/serve.sh running)
  */
-import { readFile } from 'node:fs/promises'
-import path from 'node:path'
-import { loadTable } from '../../engine/embed'
+import { ready } from '../../model/__tests__/harness'
 import { buildRouter } from '../../ground'
-import { registerSkills } from '../../pages/actions'
 import { openStore } from '../../store/db'
 import { Digest } from '../digest'
 import { Agent, type AgentEvent } from '../loop'
@@ -60,7 +57,6 @@ const store = await openStore()
 const digest = new Digest()
 const agent = new Agent(digest)
 await Promise.all([agent.load(), digest.load()])
-registerSkills()
 
 const ctx = { table, router: buildRouter(table), store, needle: undefined }
 

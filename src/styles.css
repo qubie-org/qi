@@ -8,9 +8,18 @@
 :root {
   --paper: #fff;
   --ink: #0d0d0f;
-  --ink-soft: #a3a3ab;      /* the user's own voice */
-  --agent-weight: 700;
-  --agent-tracking: -0.035em;
+  /* The user's own voice. Was #a3a3ab, which is 2.50:1 on paper and fails
+     both bars — light gray "for elegance" is the commonest reason an interface
+     is hard to read. #84848d is 3.71:1, which clears the large-text bar this
+     text is always set at, and still reads as the quieter of the two voices. */
+  --ink-soft: #84848d;
+  /* Placeholders are small and must clear 4.5:1, so they get their own value
+     rather than borrowing the display voice's. #74747e is 4.62:1. */
+  --ink-hint: #74747e;
+  /* Hairlines. One value, so every edge in the app is the same edge. */
+  --rule: color-mix(in oklch, var(--ink) 11%, transparent);
+  --agent-weight: 440;
+  --agent-tracking: -0.012em;
   --agent-size: 5.4rem;
   --motion: 1;              /* energy multiplier; theme engine drives it */
 
@@ -35,6 +44,77 @@ body {
   font-variant-ligatures: common-ligatures contextual;
 }
 
+/* The floor.
+   Light pooling at the bottom of the window: densest along the bottom edge,
+   turning up the left and right sides at the corners, gone by the time it
+   reaches the middle of the screen. It replaces the composer's hairline —
+   a rule across the window claims the page ends there, and it does not; this
+   says the same thing the way a room says it, by getting darker toward the
+   floor and into the corners.
+
+   Three ellipses, deliberately overlapping so they read as one curve rather
+   than as three washes. The two corner ones are tall and narrow, which is what
+   produces the upturn; the third is wide and shallow and centred below the
+   window, which is the floor itself. Masked so the whole thing fades upward
+   and never announces a top edge of its own.
+
+   It uses the same --bg-b the theme engine transitions, so the floor drifts
+   with the room instead of being a fixed grey. */
+.floor {
+  position: fixed;
+  left: 0; right: 0; bottom: 0;
+  height: clamp(200px, 34vh, 380px);
+  z-index: 10;
+  pointer-events: none;
+  overflow: hidden;
+  /* Rest brightness plus whatever the spring is adding. The lamps themselves
+     never change opacity, so a keystroke turns up a field that was already
+     there rather than introducing one. */
+  opacity: calc(.11 + var(--floor-lift, 0) * .26);
+  filter: saturate(calc(1 + var(--floor-lift, 0) * .55));
+  /* Composited: the spring moves a layer, it does not repaint gradients. */
+  will-change: transform, opacity;
+  transform: translate3d(calc(var(--floor-sway, 0) * 26px), 0, 0);
+  /* Fades out over the top. Without the mask the lamps stop at the element's
+     edge and draw a line across the window — the thing the floor replaced. */
+  -webkit-mask-image: linear-gradient(to top, #000 0 40%, transparent 100%);
+  mask-image: linear-gradient(to top, #000 0 40%, transparent 100%);
+}
+
+/* One colour each, anchored to the bottom edge and wider than the window, so
+   there is always colour past both sides to drift in from. */
+.lamp {
+  position: absolute;
+  bottom: -46%;
+  width: 78%;
+  height: 168%;
+  border-radius: 50%;
+  will-change: transform;
+}
+
+/* The durations are deliberately not multiples of each other. Four lamps on
+   round periods re-align every few cycles and the field starts to look like a
+   loop, which is the thing a loop is for avoiding. At 23/31/19/27 seconds the
+   arrangement does not repeat for hours. */
+.lamp--1 { left: -18%; background: radial-gradient(closest-side, var(--t1, #4285f4), transparent 72%); animation: drift-a 23s ease-in-out infinite alternate }
+.lamp--2 { left: 16%;  background: radial-gradient(closest-side, var(--t3, #fbbc04), transparent 72%); animation: drift-b 31s ease-in-out infinite alternate -6s }
+.lamp--3 { left: 44%;  background: radial-gradient(closest-side, var(--t2, #ea4335), transparent 72%); animation: drift-a 19s ease-in-out infinite alternate -11s }
+.lamp--4 { left: 72%;  background: radial-gradient(closest-side, var(--t4, #34a853), transparent 72%); animation: drift-b 27s ease-in-out infinite alternate -3s }
+
+@keyframes drift-a {
+  from { transform: translate3d(-16%, 0, 0) scale(1) }
+  to   { transform: translate3d(20%, 0, 0) scale(1.12) }
+}
+@keyframes drift-b {
+  from { transform: translate3d(18%, 0, 0) scale(1.1) }
+  to   { transform: translate3d(-19%, 0, 0) scale(.96) }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .floor { transform: none; opacity: .1; filter: none }
+  .lamp { animation: none }
+}
+
 /* Everything white. The only colour in the room is in the type. */
 .bg {
   position: fixed;
@@ -56,7 +136,12 @@ body {
   flex-direction: column;
   gap: clamp(1.6rem, 4vh, 3.4rem);
   padding: clamp(1.5rem, 5vw, 5rem);
-  padding-bottom: clamp(8rem, 16vh, 11rem);
+  /* Exactly as much room as the composer is currently taking, plus a gap.
+     The composer measures itself into --composer-h, because its height is not
+     a constant: the skill picker opens, a mode label appears, the window
+     narrows and the type grows. A guessed number is how the last line of an
+     answer ended up underneath the input. */
+  padding-bottom: calc(var(--composer-h, 7rem) + clamp(1.5rem, 4vh, 3rem));
   max-width: 1240px;
   margin: 0 auto;
 }
@@ -73,17 +158,31 @@ body {
   text-wrap: pretty;
   hyphens: none;
   /* A measure, not a container width. Display type wants ~28 characters a
-     line — the references break every 4–5 words, not every 19. */
-  max-width: 26ch;
+     line — the references break every 4–5 words, not every 19. A serif sets
+     narrower than the sans did, so the measure grows slightly to keep roughly
+     the same number of words to a line. */
+  max-width: 30ch;
   /* Nothing — not a URL, not an identifier — may push past the measure. */
   overflow-wrap: anywhere;
 }
 
 .turn-agent .river {
+  /* A serif for the thing being said, sans for everything that supports it.
+     Heavy tight sans at display size is a headline, and it read as one — the
+     page shouted every answer at the same volume. A serif at a normal weight
+     is quieter, has more shape per letter, and gives the marks somewhere to
+     sit; the sans in the user's line and the badges then reads as a different
+     voice rather than the same voice smaller.
+
+     ui-serif is New York on Apple platforms, which is where this runs. No
+     download, and it is a display serif rather than a body one. */
+  font-family: ui-serif, 'New York', 'Iowan Old Style', Charter, Georgia, serif;
   font-size: clamp(1.45rem, 3.4vw, var(--agent-size));
   font-weight: var(--agent-weight);
   letter-spacing: var(--agent-tracking);
-  line-height: 1.08;
+  /* Air. At 1.08 the lines touched and the marks under them collided with the
+     line below, which is most of what made a decorated turn look crowded. */
+  line-height: 1.22;
   color: var(--ink);
   transition: font-weight 700ms ease, letter-spacing 700ms ease, --accent 900ms ease;
 }
@@ -129,8 +228,95 @@ body {
 }
 
 /* ── inline atoms ─────────────────────────────────────────────────────────── */
-.i-em { font-style: italic }
-.i-strong { font-weight: 900 }
+/* Bold and italic are a change of voice, not a change of weight.
+   The reply is set in a serif; **this** and *this* switch to the sans the rest
+   of the interface speaks in, so emphasis reads as the machine stepping out of
+   its own prose rather than as the same sentence shouting. They are the two
+   marks the model controls directly, and the only two. */
+.i-em,
+.i-strong {
+  font-family: 'Inter var', Inter, -apple-system, BlinkMacSystemFont, sans-serif;
+  letter-spacing: -.014em;
+}
+.i-em { font-style: italic; font-weight: 400 }
+.i-strong { font-weight: 640; font-style: normal }
+
+/* ── things you can press ───────────────────────────────────────────────────
+   Every mark left in the river does something. A term asks for more about
+   itself, an @reference opens what it names, a /skill runs.
+
+   They used to be decoration — a dot beside a word because the word resembled
+   a run of shapes, a rule under whichever noun scored highest. That was colour
+   varying without signifying, and it read as crowding because it *was*
+   crowding: marks that mean nothing are noise however tastefully they are set.
+
+   So the vocabulary is small and each entry has a job. Underline for a term,
+   because an underline is the oldest "there is more here" in print. A tinted
+   chip for the two sigils, because they are tokens rather than words. */
+.i-term {
+  font: inherit;
+  color: inherit;
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+  text-decoration: none;
+  background-image: linear-gradient(
+    color-mix(in oklch, var(--accent) 42%, transparent),
+    color-mix(in oklch, var(--accent) 42%, transparent)
+  );
+  background-size: 100% .055em;
+  background-position: 0 100%;
+  background-repeat: no-repeat;
+  transition: background-size 180ms cubic-bezier(.2, .8, .3, 1), color 180ms ease;
+}
+/* On hover the rule grows into a highlight — the same gesture links use, so
+   "there is more here" and "this goes somewhere" stay one family. */
+.i-term:hover {
+  background-size: 100% .62em;
+  background-image: linear-gradient(
+    color-mix(in oklch, var(--accent) 22%, transparent),
+    color-mix(in oklch, var(--accent) 22%, transparent)
+  );
+}
+
+/* An invocation chip: /command, $skill, @app.
+   One base, three tones — the colour is what tells you which namespace you are
+   pressing, and it is the same four-tone palette everything else here uses. */
+.i-invoke {
+  font-family: 'Inter var', Inter, -apple-system, BlinkMacSystemFont, sans-serif;
+  font-size: .74em;
+  font-weight: 520;
+  letter-spacing: -.005em;
+  line-height: 1;
+  vertical-align: .1em;
+  padding: .18em .42em .22em;
+  margin: 0 .04em;
+  border: 0;
+  border-radius: .35em;
+  cursor: pointer;
+  transition: background 160ms ease;
+  color: var(--chip, var(--accent));
+  background: color-mix(in oklch, var(--chip, var(--accent)) 12%, transparent);
+}
+.i-invoke:hover:not(:disabled) { background: color-mix(in oklch, var(--chip, var(--accent)) 22%, transparent) }
+
+.i-invoke--command { --chip: var(--t4, var(--accent)) }
+.i-invoke--skill   { --chip: var(--t1, var(--accent)) }
+.i-invoke--app     { --chip: var(--t2, var(--accent)) }
+
+/* Named something that does not exist. Still a chip, because it is still
+   plainly that kind of thing — just one the app does not have. */
+.i-invoke--unknown {
+  --chip: var(--ink-soft);
+  cursor: default;
+  text-decoration: line-through;
+  text-decoration-thickness: .05em;
+  opacity: .8;
+}
+
+/* The sigil is quieter than the name it introduces — it is punctuation. */
+.i-sigil { opacity: .5; margin-right: .04em }
 .i-strike { text-decoration: line-through; text-decoration-thickness: .06em }
 .i-code {
   font-family: ui-monospace, 'SF Mono', Menlo, monospace;
@@ -139,15 +325,37 @@ body {
   letter-spacing: -.01em;
   padding: 0 .18em;
 }
+/* Links are highlighted, not underlined.
+   An underline is the same gesture the marks use, so a linked word and a marked
+   word were indistinguishable — and at display size a rule under a serif cuts
+   its descenders. A highlight sits behind the word instead: it never touches
+   the letterforms, it survives a line break with box-decoration-break, and it
+   reads as "this is a thing you can open" rather than as emphasis. */
 .i-link {
   color: inherit;
   text-decoration: none;
-  background-image: linear-gradient(var(--accent), var(--accent));
-  background-size: 100% .06em;
-  background-position: 0 92%;
-  background-repeat: no-repeat;
+  background-image: linear-gradient(
+    to top,
+    color-mix(in oklch, var(--accent) 20%, transparent) 0%,
+    color-mix(in oklch, var(--accent) 20%, transparent) 46%,
+    transparent 46%
+  );
+  border-radius: .06em;
+  padding: 0 .05em;
+  margin: 0 -.05em;
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+  transition: background-image 220ms ease;
 }
-.i-loud { font-weight: 900; letter-spacing: -.05em }
+.i-link:hover {
+  background-image: linear-gradient(
+    to top,
+    color-mix(in oklch, var(--accent) 34%, transparent) 0%,
+    color-mix(in oklch, var(--accent) 34%, transparent) 92%,
+    transparent 92%
+  );
+}
+.i-loud { font-weight: 700; letter-spacing: -.02em }
 /* A coloured word takes its tone from the theme's word zone. */
 .i-color { color: var(--tone, var(--t1, var(--accent))) }
 
@@ -280,42 +488,357 @@ body {
   color: color-mix(in oklch, var(--ink) 78%, transparent);
 }
 
-/* ── composer ─────────────────────────────────────────────────────────────── */
+/* ── composer ───────────────────────────────────────────────────────────────
+   Words in the glow. No box, no ring, no band, no rule.
+
+   The default input — rounded box, hairline border, blue focus ring — is a
+   perfectly good control that belongs to a different application. This one is a
+   page of type on paper, and the place where the next line gets written should
+   look like part of that page rather than like a form dropped onto it.
+
+   Three things were tried and removed, in order, and each removal is the reason
+   the next one looked wrong:
+
+     the card   a slab with a border and a shadow. It read as a search box, and
+                a rectangle around the one place you speak is the opposite of a
+                river.
+     the ring   a coloured focus outline. The field is autofocused on load and
+                refocused after every send, so "focused" is not a state this
+                composer is sometimes in — it is the only state it has. A focus
+                treatment that never turns off is decoration.
+     the rule   a line across the window, either under the field or above the
+                whole composer. Both say "the page stops here", which is untrue:
+                the thread continues upward and the composer is simply in front
+                of it.
+
+   What separates it is the floor — light pooling along the bottom edge and
+   turning up at the corners, so the page appears to curve away rather than to
+   end. Nothing ever scrolls underneath (the stage reserves --composer-h), so
+   the composer needs no surface of its own to stay legible, and therefore no
+   blur: glass is for things with something moving behind them.
+
+   What is left is the caret, the words, and — once there is something to send —
+   the name of the key that sends it. */
 .composer {
   position: fixed;
   left: 0; right: 0; bottom: 0;
-  z-index: 2;
-  padding: clamp(1rem, 3vw, 2rem) clamp(1.5rem, 5vw, 5rem);
+  z-index: 20;   /* above .floor (10), which is above the thread */
   display: flex;
-  justify-content: center;
-  background: linear-gradient(to top, var(--paper) 42%, transparent);
+  flex-direction: column;
+  align-items: center;
+  padding: clamp(.9rem, 2.2vh, 1.5rem) clamp(1rem, 4vw, 3rem) clamp(1rem, 2.6vh, 1.7rem);
+  /* No band and no rule above it. A hard edge says "the page stops here",
+     which is a lie — the thread continues upward and the composer is simply in
+     front of it. The floor below does the separating instead, by getting
+     denser toward the bottom rather than by drawing a line across the window. */
+  background: none;
 }
-.composer input {
+
+.composer-field {
+  position: relative;
   width: 100%;
   max-width: 1240px;
+  display: flex;
+  align-items: baseline;
+  /* A word space, not a chip's margin. The command and what follows it are one
+     sentence now, and .55rem read as a gap between two separate controls. */
+  gap: .3rem;
+  padding: .1rem 0 .1rem;
+}
+
+/* No rule under the field.
+   It was a line across the window, which is the thing the floor replaced — a
+   second one six pixels lower is the same claim made twice. The words sit in
+   the glow instead, and the caret is the affordance; there is nothing else the
+   composer needs to say about where to type.
+
+   `outline: 0` on a permanently-focused field is safe here for the same reason
+   the rule was pointless: focus never moves, so there is no state to signal.
+   The one moment focus is meaningful — a skill taking the composer — is
+   carried by the mode label and the caret's colour. */
+
+.composer input {
+  flex: 1;
+  min-width: 0;
   border: 0;
+  /* Safe to remove rather than replace: focus never moves, so there is no
+     state here for an outline to communicate. The one moment it becomes
+     meaningful — a skill taking the composer — is carried by the mode label
+     and the caret's colour. */
   outline: 0;
   background: transparent;
   font: inherit;
-  font-size: clamp(1.3rem, 3.3vw, 2.35rem);
+  font-size: clamp(1.15rem, 2.6vw, 1.75rem);
   font-weight: 300;
   letter-spacing: -.018em;
-  color: var(--ink-soft);
-  caret-color: var(--accent);
+  color: var(--ink);
+  caret-color: var(--tone, var(--ink));
 }
-.composer input::placeholder { color: color-mix(in oklch, var(--ink-soft) 45%, transparent) }
+.composer input::placeholder {
+  color: var(--ink-hint);
+  font-weight: 300;
+}
 
-.status {
+/* The divider that used to follow the mode label is gone with the label's
+   badge: a rule between the command and what you are typing after it would be
+   saying they are two things, and the whole point is that they are one line. */
+
+/* The key you are already on, named rather than replaced with a button. It
+   arrives when there is something to send, so an empty composer offers nothing
+   to press and nothing to ignore. */
+.composer-return {
+  flex: 0 0 auto;
+  align-self: center;
+  font-size: .9rem;
+  line-height: 1;
+  color: var(--ink-hint);
+  opacity: 0;
+  transform: translateX(-.2em);
+  transition: opacity 180ms ease, transform 180ms cubic-bezier(.2, .9, .25, 1);
+  pointer-events: none;
+}
+.composer-return--on { opacity: 1; transform: none }
+
+/* Thinking. A travelling line appears only while waiting — the one moment the
+   composer has something to say and no words to say it with. It is absent the
+   rest of the time, so it reads as an event rather than as furniture. */
+.composer--busy .composer-field::after {
+  content: '';
+  position: absolute;
+  left: 0; right: 0; bottom: -.28rem;
+  height: 1px;
+  border-radius: 1px;
+  opacity: .5;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    var(--tone, var(--accent)) 42%,
+    var(--tone, var(--accent)) 58%,
+    transparent
+  );
+  background-size: 42% 100%;
+  background-repeat: no-repeat;
+  animation: composer-waiting 1500ms cubic-bezier(.45, 0, .55, 1) infinite;
+}
+@keyframes composer-waiting {
+  from { background-position: -45% 0 }
+  to   { background-position: 145% 0 }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .composer--busy .composer-field::after { animation: none; opacity: .28 }
+}
+
+/* ── skills ─────────────────────────────────────────────────────────────────
+   A skill is a mode for this field, not a page somewhere. Typing `/` opens the
+   picker; choosing one puts the composer into that skill, and the placeholder
+   becomes the skill's own question.
+
+   Each skill carries its own tone, so the row reads as a palette. The previous
+   arrangement gave every skill the same red, which said only "this is a link"
+   about ten different things. */
+.composer { flex-direction: column; align-items: center }
+
+/* ── the picker, as a drawer ───────────────────────────────────────────────
+   Was a wrapping row of tinted chips, one hue per entry. Two things were wrong
+   with that. The tints were decoration — `tone` is an index, so the colour said
+   nothing about what the entry does — and colour was carrying the selected
+   state, which is the one job it must not have on its own. A row of pills also
+   reads as a set of tags rather than a list of things you can pick.
+
+   So: one column, one surface behind all of it, and no colour anywhere. The
+   drawer is the only card; rows sit on it with no border and no background of
+   their own, which is what keeps this from being the nested-card mistake. */
+.picker {
+  width: 100%;
+  max-width: 1240px;
+  display: flex;
+  flex-direction: column;
+  margin-bottom: .6rem;
+  padding: .25rem;
+  background: var(--paper);
+  border: 1px solid var(--rule);
+  border-radius: .7em;
+  /* Just enough lift to read as being in front of the page. */
+  box-shadow:
+    0 1px 2px color-mix(in oklch, var(--ink) 5%, transparent),
+    0 8px 24px -12px color-mix(in oklch, var(--ink) 18%, transparent);
+  overflow: hidden;
+  animation: picker-in 180ms cubic-bezier(.2, .8, .3, 1) both;
+}
+
+/* Name and hint on one line: the list is scanned down the left edge, so the
+   names have to sit on one column with nothing between them. */
+.picker-skill {
+  display: flex;
+  align-items: baseline;
+  gap: .6rem;
+  width: 100%;
+  padding: .34em .55em;
+  border: 0;
+  border-radius: .45em;
+  background: transparent;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background 120ms ease;
+}
+.picker-skill:hover { background: color-mix(in oklch, var(--ink) 5%, transparent) }
+
+/* Selection is a filled row plus a weight change — two signals, neither of
+   them hue, so it survives being printed, dimmed, or read by someone who does
+   not separate the colours this palette would have used. */
+.picker-skill--on { background: color-mix(in oklch, var(--ink) 8%, transparent) }
+.picker-skill--on .picker-name { font-weight: 600 }
+
+.picker-empty {
+  padding: .5rem .55rem;
+  font-size: .8rem;
+  color: var(--ink-hint);
+  font-style: italic;
+}
+
+.picker-name {
+  flex: 0 0 auto;
+  font-size: .92rem;
+  font-weight: 480;
+  letter-spacing: -.005em;
+  color: var(--ink);
+}
+
+/* What to type next, phrased as the question the command asks. This is the
+   line that says what you are supposed to do, so it is the one that had to
+   stop being a colour and start being words. */
+.picker-gives {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: .78rem;
+  font-weight: 380;
+  /* `--ink-hint` rather than `--ink-soft`: this is read, not glanced at. */
+  color: var(--ink-hint);
+}
+
+/* The one thing that still earns a mark: an entry that opens a place rather
+   than returning an answer. A glyph, not a hue. */
+.picker-opens {
+  flex: 0 0 auto;
+  font-size: .7rem;
+  color: var(--ink-hint);
+}
+
+/* The name of the skill currently holding the composer, set beside the caret
+   so the mode is visible without a banner or a dialog. */
+/* Inside the housing, before the field: the skill currently holding it. */
+/* The command you are inside, written the way you typed it.
+   It was a small tinted badge in a different family and size — which made it a
+   label *about* the field rather than part of the line, and left the ghost
+   text reading as the field's own placeholder instead of as the rest of the
+   sentence you had started. Set at the input's own size and family, dimmed
+   rather than tinted, it reads as `/research …` with the question following
+   it, and the caret is where you would expect to continue. */
+.composer-mode {
+  flex: 0 0 auto;
+  align-self: baseline;
+  font: inherit;
+  font-size: clamp(1.15rem, 2.6vw, 1.75rem);
+  font-weight: 400;
+  letter-spacing: -.018em;
+  line-height: inherit;
+  padding: 0;
+  background: none;
+  color: color-mix(in oklch, var(--ink) 62%, transparent);
+}
+.composer--skill input { caret-color: var(--ink) }
+
+/* Status and the sound toggle share one row so they read as one quiet mark in
+   the corner rather than two pieces of chrome competing for the same space. */
+.chrome {
   position: fixed;
   top: clamp(1rem, 3vw, 2rem);
   right: clamp(1.5rem, 5vw, 5rem);
   z-index: 3;
+  display: flex;
+  align-items: center;
+  gap: .55rem;
+}
+
+/* A running command, beside the status line. Quiet until you look at it —
+   it is a state indicator first and a control second. */
+.live {
+  display: inline-flex;
+  align-items: center;
+  gap: .3rem;
+  padding: .1rem .3rem .14rem .42rem;
+  border-radius: .4em;
+  background: color-mix(in oklch, var(--t3, var(--accent)) 13%, transparent);
+  font-size: .68rem;
+  font-weight: 520;
+  letter-spacing: .01em;
+  color: color-mix(in oklch, var(--ink) 62%, transparent);
+}
+
+.live-name { font-variant: small-caps; letter-spacing: .04em }
+
+.live-act {
+  border: 0;
+  padding: 0 .1rem;
+  background: none;
+  cursor: pointer;
+  font-size: .78rem;
+  line-height: 1;
+  opacity: .62;
+  transition: opacity 140ms ease;
+}
+.live-act:hover, .live-act:focus-visible { opacity: 1 }
+.live-act:focus-visible { outline: none; text-shadow: 0 0 0 var(--ink) }
+
+.status {
   font-size: .72rem;
   font-weight: 500;
   letter-spacing: .02em;
   color: color-mix(in oklch, var(--ink) 40%, transparent);
   font-variant-numeric: tabular-nums;
 }
+
+/* Three bars at a level. Muted, they collapse to a single flat line — the
+   state is legible from the silhouette alone, with no slash drawn over it. */
+.quiet {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  height: 13px;
+  padding: 0 1px;
+  border: 0;
+  background: none;
+  cursor: pointer;
+  opacity: .4;
+  transition: opacity 180ms cubic-bezier(.22,1,.36,1);
+}
+
+.quiet:hover,
+.quiet:focus-visible { opacity: .78 }
+
+.quiet:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px color-mix(in oklch, var(--t1, currentColor) 22%, transparent);
+  border-radius: 3px;
+}
+
+.quiet-bar {
+  width: 2px;
+  border-radius: 1px;
+  background: var(--ink);
+  transition: height 260ms cubic-bezier(.22,1,.36,1);
+}
+
+.quiet-bar:nth-child(1) { height: 5px }
+.quiet-bar:nth-child(2) { height: 11px }
+.quiet-bar:nth-child(3) { height: 7px }
+
+.quiet--off .quiet-bar { height: 2px }
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { transition-duration: 1ms !important; animation-duration: 1ms !important }
@@ -328,22 +851,28 @@ body {
   border-bottom: 1px dashed color-mix(in oklch, var(--accent) 55%, transparent);
 }
 
-/* An address inside toki, not out on the web. Marked with a leading dot so a
+/* An address inside qi, not out on the web. Marked with a leading dot so a
    link that navigates is distinguishable from one that leaves. */
+/* An address inside qi rather than out on the web. The tint says which;
+   the leading dot it used to carry is gone, because the highlight already
+   distinguishes a link and the dot was one more small round thing on a page
+   that had too many. */
 .i-link--internal {
   cursor: pointer;
-  background-image: linear-gradient(var(--t2, var(--accent)), var(--t2, var(--accent)));
-  background-size: 100% .05em;
+  background-image: linear-gradient(
+    to top,
+    color-mix(in oklch, var(--t2, var(--accent)) 22%, transparent) 0%,
+    color-mix(in oklch, var(--t2, var(--accent)) 22%, transparent) 46%,
+    transparent 46%
+  );
 }
-.i-link--internal::before {
-  content: '';
-  display: inline-block;
-  width: .22em;
-  height: .22em;
-  margin-right: .18em;
-  vertical-align: .22em;
-  border-radius: 50%;
-  background: var(--t2, var(--accent));
+.i-link--internal:hover {
+  background-image: linear-gradient(
+    to top,
+    color-mix(in oklch, var(--t2, var(--accent)) 36%, transparent) 0%,
+    color-mix(in oklch, var(--t2, var(--accent)) 36%, transparent) 92%,
+    transparent 92%
+  );
 }
 
 /* Chips are addresses too — clicking one opens its page. */
@@ -363,21 +892,25 @@ body {
   border-radius: .16em;
 }
 
-/* Landscape, with enough text to flow beside it. */
+/* Landscape, with enough text to flow beside it.
+   Bigger than it was, and pulled out to the measure's left edge: a picture that
+   sits inside the text column reads as an oversized glyph, while one that holds
+   the edge reads as a picture the text is written around. The negative margin
+   is what buys that — the float leaves the column, the text does not. */
 .i-chip--wide {
   float: left;
-  height: 2.6em;
-  margin: .12em .5em .12em 0;
-  border-radius: .2em;
+  height: 4.4em;
+  margin: .1em .62em .18em -1.1em;
+  border-radius: .22em;
   shape-outside: margin-box;
 }
 
 /* Portrait: taller than the line, text wraps down its side. */
 .i-chip--tall {
   float: right;
-  height: 3.4em;
-  margin: .12em 0 .2em .55em;
-  border-radius: .2em;
+  height: 5.6em;
+  margin: .1em -1.1em .22em .66em;
+  border-radius: .22em;
   shape-outside: margin-box;
 }
 
@@ -392,6 +925,143 @@ body {
 
 /* A float must not bleed into the next turn. */
 .turn-agent .river::after { content: ''; display: block; clear: both }
+
+/* ── the preview ────────────────────────────────────────────────────────────
+   A picture in the river is sized to the type around it, which for an inline
+   one is about the height of a capital letter. That is right for the sentence
+   and no use for looking at the picture, so hovering opens it at a size worth
+   seeing.
+
+   It sits above everything and takes no pointer events: it is something to
+   look at, not something to interact with, and a card that swallowed the mouse
+   would make the picture underneath unclickable. */
+.preview {
+  position: absolute;
+  z-index: 40;
+  padding: 6px;
+  border-radius: .7rem;
+  background: var(--paper);
+  box-shadow:
+    0 0 0 1px var(--rule),
+    0 18px 40px -12px rgb(0 0 0 / 24%);
+  pointer-events: none;
+  animation: preview-in 190ms cubic-bezier(.2, .9, .3, 1) both;
+}
+
+/* Positioned on the first layout pass, painted on the second — otherwise the
+   card is briefly visible at the turn's origin before it knows where to go. */
+.preview--measuring { opacity: 0 }
+
+.preview-image {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  border-radius: .45rem;
+}
+
+@keyframes preview-in {
+  from { opacity: 0; transform: scale(.9) }
+  to   { opacity: 1; transform: none }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .preview { animation: none }
+}
+
+/* ── the aside ──────────────────────────────────────────────────────────────
+   Click a picture and a note about it grows out of it on the next row, joined
+   by a drawn leader. A row, never a layer: no popover covers the text, the
+   turn simply gets taller, and the reading order survives.
+
+   Everything here is the supporting voice — sans, small, quiet — because the
+   note exists to attribute rather than to speak. It is the same step down the
+   step badges and list items take. */
+.turn { position: relative }
+
+.annot {
+  position: relative;
+  width: fit-content;
+  max-width: 42ch;
+  margin: 1.5em 0 .3em 2.6em;
+  padding: .55em .8em .5em;
+  font-family: 'Inter var', Inter, -apple-system, BlinkMacSystemFont, sans-serif;
+  font-size: .82rem;
+  font-weight: 380;
+  line-height: 1.42;
+  letter-spacing: 0;
+  color: var(--ink-soft);
+  border: 1px solid var(--rule);
+  background: var(--paper);
+  border-radius: .5em;
+  animation: annot-in 320ms cubic-bezier(.2, .8, .3, 1) both;
+}
+
+@keyframes annot-in {
+  from { opacity: 0; transform: translateY(-.35em) }
+  to   { opacity: 1; transform: none }
+}
+
+.annot-title {
+  font-weight: 620;
+  color: var(--ink);
+  /* The title is the one thing here allowed to be a proper noun at length, so
+     it wraps rather than being clipped. */
+  margin-bottom: .12em;
+}
+
+.annot-body { font-variant-numeric: tabular-nums }
+
+.annot-actions {
+  display: flex;
+  gap: .9em;
+  margin-top: .45em;
+}
+
+.annot-open,
+.annot-close {
+  font: inherit;
+  font-size: .76rem;
+  font-weight: 500;
+  color: var(--tone, var(--accent));
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+  text-decoration: none;
+  opacity: .85;
+}
+.annot-open:hover,
+.annot-close:hover { opacity: 1 }
+.annot-close { color: var(--ink-soft) }
+
+/* The leader. Absolutely positioned over the whole turn and non-interactive,
+   so it can cross the text without ever intercepting a click. */
+.annot-leader {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.annot-leader-line {
+  fill: none;
+  stroke: color-mix(in oklch, var(--tone, var(--accent)) 62%, transparent);
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  /* Drawn on rather than appearing: the same gesture the inline marks use. */
+  /* pathLength=1 is set on the element, which normalises the geometry so a
+     dasharray of 1 is exactly the whole line however long the curve is. */
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+  animation: annot-draw 420ms cubic-bezier(.3, .7, .3, 1) 60ms both;
+}
+
+@keyframes annot-draw {
+  to { stroke-dashoffset: 0 }
+}
 
 /* ── steps ──────────────────────────────────────────────────────────────────
    When a turn takes several moves, this row is the account of them. It sits
@@ -454,4 +1124,506 @@ body {
 
 @media (prefers-reduced-motion: reduce) {
   .badge-running { animation: none }
+}
+
+/* ── narrow ─────────────────────────────────────────────────────────────────
+   qi is as likely to be a column pinned beside something else as a window in
+   the middle of a screen. At 380–560px the desktop layout fails in a specific
+   way: the type shrinks to its clamp floor while the padding keeps its
+   percentage, so a third of a narrow window is margin and the words that are
+   left are the smallest they are ever allowed to be. Both halves are wrong —
+   less room is a reason for *more* of it to be text, not less.
+
+   So the padding gives way first, the measure stops being a measure (at this
+   width the window is the measure), and the type is set from viewport width
+   with a floor that is still display type rather than body copy. */
+/* 760, not 620.
+   A side window pinned beside an editor lands around 600–740px, which the old
+   breakpoint missed by a few pixels — so the window that most needs the narrow
+   layout got the wide one squeezed, with the type at its clamp floor and a
+   third of the width given to padding. The breakpoint is set from where this
+   is actually used rather than from a device size. */
+@media (max-width: 760px) {
+  .stage {
+    /* Not the shorthand. It resets padding-bottom, which is where the room for
+       the composer lives — and the symptom is the last line of an answer
+       sitting behind the input with everything else looking correct. */
+    padding-left: 1.1rem;
+    padding-right: 1.1rem;
+    padding-top: 1.1rem;
+  }
+
+  .river {
+    /* The window is narrower than any sensible measure, so imposing one on top
+       of it only wastes the little width there is. */
+    max-width: none;
+  }
+
+  .turn-agent .river {
+    font-size: clamp(1.6rem, 8.2vw, 2.9rem);
+    line-height: 1.16;
+  }
+
+  .turn-user .river {
+    max-width: none;
+    font-size: clamp(1rem, 4.6vw, 1.35rem);
+  }
+
+  .composer {
+    padding: 0 .8rem .8rem;
+  }
+  .composer-field {
+    padding: .1rem 0;
+  }
+  .composer input {
+    font-size: clamp(1.05rem, 4.8vw, 1.5rem);
+  }
+
+  /* Floats keep their side but lose the bleed. The negative margin exists to
+     put a picture on the edge of a wide measure; in a narrow column that same
+     margin hangs it off the window. */
+  .i-chip--wide,
+  .i-chip--tall {
+    height: 3.6em;
+    margin-left: 0;
+    margin-right: .5em;
+  }
+  .i-chip--tall {
+    margin-left: .5em;
+    margin-right: 0;
+  }
+
+  /* The picker scrolls sideways rather than growing into five stacked rows
+     that push the composer off the bottom of the window. */
+  .picker {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    scrollbar-width: none;
+    padding-bottom: 2px;
+  }
+  .picker::-webkit-scrollbar { display: none }
+  .picker-skill { flex: 0 0 auto }
+
+  .annot {
+    margin-left: 1rem;
+    max-width: none;
+  }
+
+  /* A preview card wider than the window is not a preview of anything. */
+  .preview { max-width: calc(100vw - 24px) }
+}
+
+/* Very narrow — a phone-width strip. The step down is small because the
+   previous rule already did most of the work; this only stops the largest
+   words in a heading from setting the width of the whole column. */
+@media (max-width: 380px) {
+  .stage {
+    padding-left: .85rem;
+    padding-right: .85rem;
+    padding-top: .9rem;
+  }
+  .composer { padding: 0 .7rem .7rem }
+  .turn-agent .river { font-size: clamp(1.45rem, 8.6vw, 2.2rem) }
+}
+
+/* ── apps ───────────────────────────────────────────────────────────────────
+   The `@` namespace: a surface that takes the page rather than saying
+   something into it. Two pieces of chrome belong to the shell rather than to
+   any app — the breadcrumb, so every app has a way out whether or not it drew
+   one, and the rule that the conversation underneath is *hidden* rather than
+   unmounted, so coming back finds the thread and the scroll position exactly
+   as they were.
+
+   [hidden] needs saying explicitly: the UA rule that implements it is a bare
+   `display: none` on the element, and `.stage` sets `display: flex`, which
+   wins on specificity. The attribute would be inert without this line. */
+.stage[hidden] { display: none }
+
+/* Back to the conversation.
+
+   Positioned rather than laid out, and the numbers are the window's, not a
+   designer's. 82px is the stoplight inset Shell.swift reserves; the 34px below
+   it is the drag strip, which is a SwiftUI view sitting *above* the web view
+   and would swallow the press if this sat inside its band. So the crumb clears
+   the traffic lights horizontally and the drag region vertically, which is the
+   only rectangle in that corner where a button is both visible and clickable. */
+.crumbs {
+  --stoplight: 82px;
+  --dragstrip: 34px;
+  position: fixed;
+  top: calc(var(--dragstrip) + .55rem);
+  left: var(--stoplight);
+  z-index: 4;
+  display: flex;
+  align-items: baseline;
+  gap: .4rem;
+  font-size: .78rem;
+  letter-spacing: .01em;
+}
+
+.crumb {
+  border: 0;
+  padding: 0;
+  background: none;
+  font: inherit;
+  color: color-mix(in oklch, var(--ink) 44%, transparent);
+  cursor: pointer;
+  transition: color 160ms ease;
+}
+.crumb:hover, .crumb:focus-visible { color: var(--ink) }
+.crumb:focus-visible { outline: none; text-decoration: underline; text-underline-offset: .25em }
+
+.crumb-sep { color: color-mix(in oklch, var(--ink) 22%, transparent) }
+
+/* Where you are is not a link. Same size, no affordance, slightly more ink —
+   a breadcrumb whose last crumb is pressable is lying about what it does. */
+.crumb--here {
+  color: color-mix(in oklch, var(--ink) 70%, transparent);
+  cursor: default;
+  font-variant: small-caps;
+  letter-spacing: .05em;
+}
+
+/* The surface itself, in the same column the conversation uses so switching
+   between them does not move the measure. */
+.app {
+  position: relative;
+  z-index: 1;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  gap: 1.1rem;
+  max-width: 1240px;
+  margin: 0 auto;
+  padding: calc(var(--dragstrip, 34px) + 3.2rem) clamp(1.5rem, 5vw, 5rem) clamp(2rem, 6vh, 4rem);
+}
+
+/* ── @note ──────────────────────────────────────────────────────────────────
+   Writing that stays. The index is a list of what exists; the editor is one
+   field. Everything that is not the words themselves is set small, quiet and
+   in the interface face, so that the only thing on the page at reading size is
+   what somebody wrote. */
+
+.note-head {
+  display: flex;
+  align-items: baseline;
+  gap: 1rem;
+  padding-bottom: .5rem;
+  border-bottom: 1px solid var(--rule);
+}
+
+/* No box. A rule under it and nothing else — the same argument the composer
+   makes: a border draws a container where there is only a place to type. */
+.note-find {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  padding: .2rem 0;
+  background: none;
+  outline: none;
+  font-family: ui-serif, 'New York', 'Iowan Old Style', Charter, Georgia, serif;
+  font-size: clamp(1.2rem, 2.6vw, 1.6rem);
+  color: var(--ink);
+  caret-color: var(--t1, var(--accent));
+}
+.note-find::placeholder { color: var(--ink-hint) }
+
+.note-new {
+  flex: none;
+  border: 1px solid color-mix(in oklch, var(--t1, var(--accent)) 30%, transparent);
+  border-radius: .5em;
+  padding: .3rem .7rem;
+  background: color-mix(in oklch, var(--t1, var(--accent)) 7%, transparent);
+  font-size: .76rem;
+  font-weight: 520;
+  color: color-mix(in oklch, var(--ink) 74%, transparent);
+  cursor: pointer;
+  max-width: 22rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  transition: background 160ms ease, border-color 160ms ease;
+}
+.note-new:hover, .note-new:focus-visible {
+  background: color-mix(in oklch, var(--t1, var(--accent)) 15%, transparent);
+  border-color: color-mix(in oklch, var(--t1, var(--accent)) 55%, transparent);
+  outline: none;
+}
+
+.note-list { list-style: none; margin: 0; padding: 0 }
+
+.note-row {
+  display: block;
+  width: 100%;
+  border: 0;
+  border-bottom: 1px solid var(--rule);
+  padding: .8rem .2rem;
+  background: none;
+  text-align: left;
+  cursor: pointer;
+  transition: background 140ms ease;
+}
+.note-row:hover, .note-row:focus-visible {
+  background: color-mix(in oklch, var(--ink) 3%, transparent);
+  outline: none;
+}
+
+.note-row-title {
+  display: flex;
+  align-items: center;
+  gap: .45rem;
+  font-family: ui-serif, 'New York', 'Iowan Old Style', Charter, Georgia, serif;
+  font-size: 1.06rem;
+  color: var(--ink);
+}
+
+.note-row-snip {
+  display: block;
+  margin-top: .18rem;
+  font-size: .78rem;
+  line-height: 1.5;
+  color: var(--ink-soft);
+}
+/* The matched characters, so a result can be checked by eye rather than
+   taken on faith. Colour only — a filled highlight would out-shout the title. */
+.note-row-snip mark {
+  background: none;
+  color: var(--ink);
+  font-weight: 600;
+}
+
+/* Unsaved work, on the row that has it. A dot, because the index is a list of
+   names and a word here would be a second column nobody asked for. */
+.note-dot {
+  width: .4em;
+  height: .4em;
+  border-radius: 50%;
+  background: var(--t3, var(--accent-2));
+  flex: none;
+}
+
+.note-empty, .note-aside {
+  margin: 1.2rem .2rem 0;
+  font-size: .82rem;
+  color: var(--ink-soft);
+}
+/* "Closest by meaning" is a different claim from "here are your matches", so
+   it is set as a heading over its own list rather than blended into one. */
+.note-aside {
+  margin-top: 2rem;
+  font-variant: small-caps;
+  letter-spacing: .06em;
+  color: var(--ink-hint);
+}
+
+/* ── the editor ─────────────────────────────────────────────────────────── */
+
+.note-bar {
+  display: flex;
+  align-items: center;
+  gap: .8rem;
+  font-size: .74rem;
+}
+
+.note-state {
+  color: var(--ink-hint);
+  font-variant-numeric: tabular-nums;
+}
+
+.note-acts { margin-left: auto; display: flex; align-items: center; gap: .45rem }
+
+.note-act {
+  border: 1px solid transparent;
+  border-radius: .45em;
+  padding: .22rem .6rem;
+  background: none;
+  font: inherit;
+  color: color-mix(in oklch, var(--ink) 58%, transparent);
+  cursor: pointer;
+  transition: background 140ms ease, color 140ms ease, border-color 140ms ease;
+}
+.note-act:hover:not(:disabled), .note-act:focus-visible:not(:disabled) {
+  background: color-mix(in oklch, var(--ink) 6%, transparent);
+  color: var(--ink);
+  outline: none;
+}
+/* Disabled rather than hidden: save is always where you left it, and its state
+   tells you whether there is anything to save. A button that vanishes when
+   there is nothing to do makes you hunt for it when there is. */
+.note-act:disabled { opacity: .3; cursor: default }
+
+.note-act--go {
+  border-color: color-mix(in oklch, var(--t1, var(--accent)) 32%, transparent);
+  color: color-mix(in oklch, var(--ink) 80%, transparent);
+}
+.note-act--quiet { color: var(--ink-hint) }
+/* The one button that can lose something says so on the second press. */
+.note-act--warn {
+  border-color: color-mix(in oklch, var(--t3, var(--accent-2)) 55%, transparent);
+  background: color-mix(in oklch, var(--t3, var(--accent-2)) 12%, transparent);
+  color: var(--ink);
+}
+
+.note-page { position: relative; flex: 1 }
+
+/* The document's baseline typography. The blocks inside it depart from this —
+   that is the whole point of them — but they depart from one place, so the
+   page has a single voice rather than five unrelated ones. */
+.note-type {
+  font-family: ui-serif, 'New York', 'Iowan Old Style', Charter, Georgia, serif;
+  font-size: clamp(1.05rem, 1.5vw, 1.22rem);
+  font-weight: 400;
+  line-height: 1.78;
+  letter-spacing: -.003em;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+/* The editable surface.
+
+   No border, no background, no visible field. Everything that would say "this
+   is an input" is absent, because the thing on screen is supposed to be the
+   note and not a box containing the note. What is left is the writing and the
+   caret. */
+.note-doc {
+  display: block;
+  outline: none;
+  min-height: 62vh;
+  padding: .35rem 0 .35rem 2.1rem;
+  color: var(--ink);
+  caret-color: var(--t1, var(--accent));
+  /* Long words and pasted URLs wrap rather than widening the column. */
+  overflow-wrap: break-word;
+}
+
+/* An empty document says what to do, once. `::before` on the container rather
+   than on the first block, so it cannot be typed into or deleted. */
+.note-doc[data-empty]::before {
+  content: 'write.';
+  position: absolute;
+  left: 2.1rem;
+  top: .35rem;
+  color: var(--ink-hint);
+  pointer-events: none;
+}
+
+/* ── blocks draw themselves ───────────────────────────────────────────────
+   The rule the editor exists to keep: no markdown character is ever on
+   screen. A heading is bigger. A list item has a bullet that CSS drew. A
+   quote has a rule beside it. The `#`, the `-` and the `>` live only in the
+   file that gets saved. */
+.blk { margin: 0 }
+.blk + .blk { margin-top: .5em }
+
+.blk[data-kind='heading'] {
+  font-size: 1.42em;
+  font-weight: 600;
+  line-height: 1.3;
+  letter-spacing: -.015em;
+  margin-top: 1.5em;
+}
+/* Except at the very top, where a note's title needs no run-up. */
+.blk:first-child[data-kind='heading'] { margin-top: 0 }
+
+.blk[data-kind='list'] {
+  /* Hanging indent, so a wrapped item sets under its own text rather than
+     back under the bullet. */
+  padding-left: 1.15em;
+  text-indent: -1.15em;
+  margin-top: .18em;
+}
+.blk[data-kind='list']::before {
+  content: '•';
+  display: inline-block;
+  width: 1.15em;
+  text-indent: 0;
+  color: color-mix(in oklch, var(--ink) 42%, transparent);
+}
+
+.blk[data-kind='quote'] {
+  padding-left: .9em;
+  border-left: 2px solid color-mix(in oklch, var(--t1, var(--accent)) 34%, transparent);
+  color: color-mix(in oklch, var(--ink) 76%, transparent);
+  font-style: italic;
+}
+
+.blk[data-kind='code'] {
+  font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+  font-size: .84em;
+  line-height: 1.6;
+  padding: .12em .5em;
+  border-radius: .3em;
+  background: color-mix(in oklch, var(--ink) 4.5%, transparent);
+  white-space: pre-wrap;
+}
+/* Consecutive code lines read as one block, not as a stack of chips. */
+.blk[data-kind='code'] + .blk[data-kind='code'] { margin-top: 0; border-radius: 0 }
+
+/* Inline marks, produced by the input rules — again, never their markers. */
+.note-doc strong { font-weight: 640 }
+.note-doc em { font-style: italic }
+.note-doc code {
+  font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+  font-size: .86em;
+  padding: .05em .3em;
+  border-radius: .28em;
+  background: color-mix(in oklch, var(--ink) 6%, transparent);
+}
+/* One glyph, beside the block the caret is in.
+
+   It no longer explains markup — the blocks draw themselves now — so what is
+   left for it to say is the one thing about a block that is genuinely
+   invisible: which of the five kinds Tab is about to move it to next. */
+.note-gutter {
+  position: absolute;
+  left: 0;
+  width: 2.1rem;
+  transform: translateY(-50%);
+  text-align: left;
+  font-size: .82rem;
+  line-height: 1;
+  color: color-mix(in oklch, var(--t1, var(--accent)) 62%, transparent);
+  transition: top 120ms cubic-bezier(.22,1,.36,1), color 200ms ease;
+  user-select: none;
+  pointer-events: none;
+}
+
+.note-foot {
+  margin: 0;
+  font-size: .72rem;
+  color: var(--ink-hint);
+}
+.note-foot kbd {
+  font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+  font-size: .92em;
+  padding: 0 .25em;
+  border-radius: .25em;
+  background: color-mix(in oklch, var(--ink) 6%, transparent);
+}
+.note-linkish {
+  border: 0;
+  padding: 0;
+  background: none;
+  font: inherit;
+  color: color-mix(in oklch, var(--t1, var(--accent)) 85%, transparent);
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: .22em;
+}
+
+@media (max-width: 680px) {
+  .note-head { flex-direction: column; align-items: stretch; gap: .5rem }
+  .note-new { max-width: none }
+  .note-acts { gap: .3rem }
+}
+
+/* Which place the verbs below belong to. A caption, not a heading: it names
+   the thing you already chose, so it should be the quietest line in the
+   drawer rather than the loudest. */
+.picker-of {
+  padding: .3em .55em .25em;
+  font-size: .72rem;
+  font-weight: 480;
+  letter-spacing: -.005em;
+  color: var(--ink-hint);
 }

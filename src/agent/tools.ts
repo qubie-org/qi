@@ -1,16 +1,27 @@
 /**
- * What the agent can do, and what doing it means.
+ * What the agent can do out of the box, and what doing it means.
  *
- * Four verbs, deliberately. A 4B model's tool selection degrades sharply past
- * about five options — it starts picking the one whose description shares the
- * most words with the question rather than the one that would answer it — and
- * every verb here already exists as a concept in the page space, so the agent
- * is choosing between things the rest of toki can already render:
+ * Three verbs, deliberately. A small model's tool selection degrades sharply
+ * past about five options — it starts picking the one whose description shares
+ * the most words with the question rather than the one that would answer it —
+ * and every verb here already exists as a concept in the page space, so the
+ * agent is choosing between things the rest of qi can already render:
  *
  *   look    find something out in the world   → grounding, the ten sources
  *   recall  find something out from memory    → the store, by embedding
- *   open    go to a page already known        → the toki: address space
- *   do      run a registered skill            → toki:do/<verb>/<argument>
+ *   open    go to a page already known        → the qi: address space
+ *
+ * There used to be a fourth, `do`, which ran a named source. It is gone: a
+ * person reaches those directly through the composer now (see pages/sigils.ts),
+ * and `look` already reaches all of them automatically. Two ways in was one
+ * concept too many, and it cost a slot on a model whose tool selection degrades
+ * past about five options.
+ *
+ * Packs add more. `see` arrives with the vision pack, `read` with the document
+ * parser, `forecast` with the timeseries one — and the loop offers whatever is
+ * bound rather than a fixed list, which is the entire reason the four above are
+ * expressed in the same shape a pack uses. There is no privileged core verb;
+ * these are just the ones that need no weights beyond the model itself.
  *
  * Nothing here returns raw text to the model. Every executor returns a string
  * that the summariser compresses before it reaches the agent's context, so the
@@ -18,126 +29,54 @@
  * separation is the whole reason a small model can run several steps without
  * losing the thread.
  */
-import type { Table } from '../engine/embed'
-import { embed } from '../engine/embed'
 import { factContext, ground, type Fact, type Router } from '../ground'
+import type { Verb } from '../model/packs'
+import { embed } from '../model/vectors'
 import { pageFromFact } from '../pages/build'
-import { actionAddress, parseAction, runAction } from '../pages/actions'
 import { address, all, resolve } from '../pages/space'
 import type { Store } from '../store/db'
 
 export type ToolContext = {
-  table: Table
   router: Router
   store: Store
-  /**
-   * Typed from what `ground` expects rather than from ActionContext: the two
-   * differ only in how tightly the returned tool calls are described, and
-   * ground's is the stricter of the pair, so it is the one that has to hold.
-   */
-  needle: Parameters<typeof ground>[3]
-}
-
-/** What an executor gives back: prose for the summariser, plus anything visual. */
-export type ToolResult = {
-  /** Raw-ish text, headed for the summariser and never straight to the agent. */
-  work: string
-  /** Set when the step produced a citable fact, so the reply can attribute it. */
-  fact?: Fact
-  /** True when the step found nothing; the agent is told plainly rather than fudged. */
-  empty?: boolean
-}
-
-/**
- * OpenAI-shaped declarations, handed to llama-server which folds them into A1's
- * own chat template. Descriptions are written for a small model: what it is
- * for, and when *not* to use it, since the second is what stops a four-tool
- * agent calling `look` for everything.
- */
-export const TOOLS = [
-  {
-    type: 'function',
-    function: {
-      name: 'look',
-      description:
-        'Find a current fact in the world: weather, prices, populations, definitions, pictures. ' +
-        'Use for anything you do not already know or were not just told. Do not use to repeat something already in the context.',
-      parameters: {
-        type: 'object',
-        properties: { query: { type: 'string', description: 'What to find out, in a few words.' } },
-        required: ['query'],
-      },
-    },
-  },
-  {
-    type: 'function',
-    function: {
-      name: 'recall',
-      description:
-        'Search what this conversation has already established. Use when the question refers to something said earlier, ' +
-        'or before looking something up a second time.',
-      parameters: {
-        type: 'object',
-        properties: { query: { type: 'string', description: 'What to remember, in a few words.' } },
-        required: ['query'],
-      },
-    },
-  },
-  {
-    type: 'function',
-    function: {
-      name: 'open',
-      description: 'Open a page that already exists by name, and read it.',
-      parameters: {
-        type: 'object',
-        properties: { name: { type: 'string', description: 'The page name.' } },
-        required: ['name'],
-      },
-    },
-  },
-  {
-    type: 'function',
-    function: {
-      name: 'do',
-      description: 'Run a skill. Only use a verb listed as available in the context.',
-      parameters: {
-        type: 'object',
-        properties: {
-          verb: { type: 'string', description: 'The skill to run.' },
-          argument: { type: 'string', description: 'What to run it on. May be empty.' },
-        },
-        required: ['verb'],
-      },
-    },
-  },
-] as const
-
-export type ToolName = 'look' | 'recall' | 'open' | 'do'
-
-/** The word shown on the badge while a step runs, before the summariser names it. */
-export const VERB: Record<ToolName, string> = {
-  look: 'looking up',
-  recall: 'remembering',
-  open: 'opening',
-  do: 'running',
+  /** Set by the loop when a step produces a citable fact. */
+  facts?: Fact[]
 }
 
 /** The argument a badge shows, and the string the summariser is given as fallback. */
-export function subject(name: ToolName, args: Record<string, unknown>): string {
-  if (name === 'do') return [args.verb, args.argument].filter(Boolean).join(' ')
-  return String(args.query ?? args.name ?? '')
+export function subject(name: string, args: Record<string, unknown>): string {
+  return String(args.query ?? args.name ?? args.question ?? '')
 }
 
-export async function execute(
-  name: ToolName,
-  args: Record<string, unknown>,
-  ctx: ToolContext,
-): Promise<ToolResult> {
-  switch (name) {
-    case 'look': {
+const ctxOf = (ctx: unknown) => ctx as ToolContext
+
+/**
+ * Descriptions are written for a small model: what the verb is for, and when
+ * *not* to use it. The second half is what stops a four-tool agent calling
+ * `look` for everything.
+ */
+export const CORE_VERBS: Verb[] = [
+  {
+    verb: 'looking up',
+    declaration: {
+      type: 'function',
+      function: {
+        name: 'look',
+        description:
+          'Find a current fact in the world: weather, prices, populations, definitions, pictures. ' +
+          'Use for anything you do not already know or were not just told. Do not use to repeat something already in the context.',
+        parameters: {
+          type: 'object',
+          properties: { query: { type: 'string', description: 'What to find out, in a few words.' } },
+          required: ['query'],
+        },
+      },
+    },
+    async run(args, raw) {
+      const ctx = ctxOf(raw)
       const query = String(args.query ?? '').trim()
       if (!query) return { work: 'no query given', empty: true }
-      const fact = await ground(query, ctx.table, ctx.router, ctx.needle).catch(() => null)
+      const fact = await ground(query, ctx.router).catch(() => null)
       if (!fact) return { work: `Looked up "${query}" and found nothing.`, empty: true }
 
       // A fact found is a fact kept: it becomes an addressable page and a row
@@ -153,21 +92,66 @@ export async function execute(
           src: fact.src,
           url: fact.srcUrl,
         },
-        embed(ctx.table, `${query} ${fact.label}`),
+        await embed(`${query} ${fact.label}`),
       )
-      return { work: `Looked up "${query}". ${factContext(fact)}`, fact }
-    }
-
-    case 'recall': {
+      ctx.facts?.push(fact)
+      return `Looked up "${query}". ${factContext(fact)}`
+    },
+  },
+  {
+    verb: 'remembering',
+    declaration: {
+      type: 'function',
+      function: {
+        name: 'recall',
+        description:
+          'Search what this conversation has already established. Use when the question refers to something said earlier, ' +
+          'or before looking something up a second time.',
+        parameters: {
+          type: 'object',
+          properties: { query: { type: 'string', description: 'What to remember, in a few words.' } },
+          required: ['query'],
+        },
+      },
+    },
+    async run(args, raw) {
+      const ctx = ctxOf(raw)
       const query = String(args.query ?? '').trim()
-      const hits = ctx.store.recall(embed(ctx.table, query), 3)
+      const hits = ctx.store.recall(await embed(query), 3)
       if (!hits.length) return { work: `Nothing remembered about "${query}".`, empty: true }
-      return { work: `Remembered about "${query}": ${hits.map((h) => h.text).join('; ')}.` }
-    }
-
-    case 'open': {
-      const name_ = String(args.name ?? '').trim()
-      const hit = resolve(address(name_), ctx.table) ?? resolve(name_, ctx.table)
+      return `Remembered about "${query}": ${hits.map((h) => h.text).join('; ')}.`
+    },
+  },
+  {
+    verb: 'opening',
+    declaration: {
+      type: 'function',
+      function: {
+        name: 'open',
+        description: 'Open a page that already exists by name, and read it.',
+        parameters: {
+          type: 'object',
+          properties: { name: { type: 'string', description: 'The page name.' } },
+          required: ['name'],
+        },
+      },
+    },
+    async run(args) {
+      const name = String(args.name ?? '').trim()
+      // Exact only. No soft match, at any threshold.
+      //
+      // `resolve` will happily land near a name, which is right for following a
+      // link — a person clicking "the apollo mission" means the page about it.
+      // An agent naming a page is the opposite case: it invents names it has
+      // never been told exist. "red lighthouse photo" soft-matched the page
+      // *describing the image source*, the model read it, learned that qi has
+      // an image search, and concluded from that page that it could not provide
+      // an image. A confident wrong answer assembled entirely out of a near
+      // miss, and raising the threshold only moves which names do it.
+      //
+      // Telling it the page does not exist costs nothing, because the list of
+      // real ones goes back with the refusal.
+      const hit = (await resolve(address(name), 1.1)) ?? (await resolve(name, 1.1))
       if (!hit) {
         // Naming what does exist turns a dead end into a usable next step, which
         // is the difference between an agent that recovers and one that repeats
@@ -176,26 +160,12 @@ export async function execute(
           .slice(0, 6)
           .map((p) => p.title)
           .join(', ')
-        return { work: `No page called "${name_}". Pages that exist: ${near || 'none yet'}.`, empty: true }
+        return {
+          work: `No page called "${name}". Pages that exist: ${near || 'none yet'}.`,
+          empty: true,
+        }
       }
-      return { work: `Opened "${hit.page.title}". ${hit.page.body}` }
-    }
-
-    case 'do': {
-      const verb = String(args.verb ?? '').trim()
-      const argument = String(args.argument ?? '').trim()
-      const addr = actionAddress(verb, argument)
-      if (!parseAction(addr)) return { work: `"${verb}" is not a skill.`, empty: true }
-      const result = await runAction(addr, {
-        table: ctx.table,
-        router: ctx.router,
-        needle: ctx.needle as never,
-      })
-      if (result.kind === 'fact') {
-        return { work: `Ran ${verb} on "${argument}". ${factContext(result.fact)}`, fact: result.fact }
-      }
-      if (result.kind === 'page') return { work: `Ran ${verb}. ${result.page.body}` }
-      return { work: `Ran ${verb}: ${result.reason}`, empty: true }
-    }
-  }
-}
+      return `Opened "${hit.page.title}". ${hit.page.body}`
+    },
+  },
+]

@@ -11,7 +11,7 @@ src/ground/sources.ts. Nothing here ships to the browser directly.
 import json, pathlib, re, sys, urllib.request, urllib.error
 from concurrent.futures import ThreadPoolExecutor
 
-ORIGIN = "https://toki.local"
+ORIGIN = "https://qi.local"
 TIMEOUT = 8
 WORKERS = 8  # deliberately gentle: these are strangers' free endpoints
 
@@ -49,7 +49,7 @@ print(f"{len(rows)} keyless + https + self-declared-CORS candidates", file=sys.s
 def probe(r):
     req = urllib.request.Request(
         r["url"],
-        headers={"Origin": ORIGIN, "User-Agent": "toki-probe/0.1 (+grounding source check)"},
+        headers={"Origin": ORIGIN, "User-Agent": "qi-probe/0.1 (+grounding source check)"},
     )
     try:
         with urllib.request.urlopen(req, timeout=TIMEOUT) as resp:

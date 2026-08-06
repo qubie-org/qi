@@ -1,0 +1,224 @@
+{
+  "note": "Every weight qi can run. One file, read by both tools/pull.sh and src/model/packs.ts, so the installer and the app can never disagree about what a pack is. All Apache-2.0, all ibm-granite.",
+  "packs": [
+    {
+      "id": "core",
+      "title": "granite 4.1 3b",
+      "what": "The model that thinks. Streams replies, calls tools, and fills JSON schemas under a grammar. Dense rather than MoE on purpose: it is the base every granitelib adapter is trained against, so the whole intrinsics shelf loads onto weights already resident.",
+      "repo": "ibm-granite/granite-4.1-3b-GGUF",
+      "files": [
+        "granite-4.1-3b-Q4_K_M.gguf"
+      ],
+      "bytes": 2099501664,
+      "runtime": "llama",
+      "required": true,
+      "binds": [
+        "say",
+        "call",
+        "json"
+      ],
+      "port": 8082,
+      "sha256": {
+        "granite-4.1-3b-Q4_K_M.gguf": "662b0626cd58f443baea23559b469df6576a81d349649c59413b36a9fb32eb29"
+      },
+      "mirrors": [
+        {
+          "repo": "lmstudio-community/granite-4.0-h-tiny-GGUF",
+          "why": "A plain llama.cpp conversion of the same official weights. Not byte-identical to IBM's own GGUF — a different converter version writes different metadata — so it carries its own hash rather than sharing one.",
+          "sha256": {
+            "granite-4.0-h-tiny-Q4_K_M.gguf": "064bea0136420b38d0b65697fa5e772e28b112eee1757aacc7f64eba6bf37810"
+          }
+        },
+        {
+          "repo": "unsloth/granite-4.0-h-tiny-GGUF",
+          "why": "Second mirror, measured at the same throughput as the first.",
+          "sha256": {}
+        }
+      ]
+    },
+    {
+      "id": "fast",
+      "title": "granite 4.0 h-tiny",
+      "port": 8085,
+      "what": "An alternative core: 7B total but only 1B active, and 36 of its 40 layers are Mamba2 with fixed-size state. Generates like a 1B and holds a long conversation for a fraction of the KV cost. No granitelib adapter targets it, so the intrinsics shelf does not apply.",
+      "repo": "ibm-granite/granite-4.0-h-tiny-GGUF",
+      "files": [
+        "granite-4.0-h-tiny-Q4_K_M.gguf"
+      ],
+      "bytes": 4230976352,
+      "runtime": "llama",
+      "required": false,
+      "binds": [
+        "say",
+        "call",
+        "json"
+      ]
+    },
+    {
+      "id": "see",
+      "title": "eyes",
+      "what": "Reads images: charts to CSV, tables to HTML, key-value pairs out of scanned documents. Built on the dense Granite 4.1 tower rather than the core's hybrid one, so it is genuinely a second model — but it speaks the same chat template and tokenizer, and it sleeps when idle.",
+      "repo": "ibm-granite/granite-vision-4.1-4b-GGUF",
+      "files": [
+        "granite-vision-4.1-4b-Q4_K_M.gguf",
+        "mmproj-model-f16.gguf"
+      ],
+      "bytes": 3300000000,
+      "runtime": "llama",
+      "required": false,
+      "binds": [
+        "see"
+      ],
+      "port": 8083
+    },
+    {
+      "id": "embed",
+      "title": "meaning",
+      "what": "Turns text into vectors: retrieval, the working set, source routing, and the colour the page takes on. Roberta-shaped and 384-dimensional, which converts cleanly to CoreML when the native shell is there to run it on the Neural Engine.",
+      "repo": "ibm-granite/granite-embedding-30m-english",
+      "files": [
+        "model.onnx",
+        "tokenizer.json",
+        "config.json"
+      ],
+      "bytes": 122800000,
+      "runtime": "onnx",
+      "required": true,
+      "binds": [
+        "embed"
+      ],
+      "sha256": {
+        "model.onnx": "3a85876825c5144a646dd4da8d05271e2536774481849e8825102ca2126770fc",
+        "tokenizer.json": "33465117406b9007673e8ba283f7f1383d9b5094df947481af60eec94ed7d7bd",
+        "config.json": "875a866ab8bd1bdf0aa304977ce49c03c97323546ea67cb24110c00214cff984"
+      }
+    },
+    {
+      "id": "rerank",
+      "title": "ordering",
+      "what": "A cross-encoder that scores a shortlist against the question. Reads query and candidate together, which a bi-encoder cannot, so it fixes the cases where two answers embed almost identically and only one is right.",
+      "repo": "ibm-granite/granite-embedding-reranker-english-r2",
+      "files": [
+        "model.safetensors",
+        "tokenizer.json",
+        "config.json"
+      ],
+      "bytes": 600000000,
+      "runtime": "onnx",
+      "required": false,
+      "binds": [
+        "rerank"
+      ]
+    },
+    {
+      "id": "docs",
+      "title": "documents",
+      "what": "258M of document parser: layout, tables, formulas and code out of a PDF page or a screenshot, emitted as structured markup rather than prose. Small enough to run on every page of a long document.",
+      "repo": "ibm-granite/granite-docling-258M",
+      "files": [
+        "model.safetensors",
+        "tokenizer.json",
+        "config.json"
+      ],
+      "bytes": 550000000,
+      "runtime": "onnx",
+      "required": false,
+      "binds": [
+        "read"
+      ]
+    },
+    {
+      "id": "hear",
+      "title": "ears",
+      "what": "Speech to text in six languages, and translation into English. A speech encoder in front of the same Granite language tower.",
+      "repo": "ibm-granite/granite-speech-4.1-2b",
+      "files": [
+        "model.safetensors",
+        "config.json"
+      ],
+      "bytes": 2000000000,
+      "runtime": "mlx",
+      "required": false,
+      "binds": [
+        "listen"
+      ],
+      "port": 8084
+    },
+    {
+      "id": "rag",
+      "title": "citations",
+      "what": "Five LoRA adapters, not a model: answerability, citations, hallucination detection, query clarification, query rewrite. They load onto the core's weights and are selected per request, so the whole shelf costs 400 MB rather than five models.  Required: the answerability adapter gates every source the research process reads, and without it the gate fails open and the notes fill with pages that merely mention the subject. Three of the five are activated variants produced by a local conversion — HF ships those as safetensors, not GGUF — so they come from this project's own release rather than upstream.",
+      "repo": "ibm-granite/granitelib-rag-r1.0",
+      "files": [
+        {
+          "from": "answerability/granite4.1_3b/lora/Lora-bf16.gguf",
+          "to": "answerability.gguf"
+        },
+        {
+          "from": "citations/granite4.1_3b/lora/Lora-bf16.gguf",
+          "to": "citations.gguf"
+        },
+        {
+          "from": "hallucination_detection/granite4.1_3b/lora/Lora-bf16.gguf",
+          "to": "hallucination_detection.gguf"
+        },
+        {
+          "from": "query_clarification/granite4.1_3b/lora/Lora-bf16.gguf",
+          "to": "query_clarification.gguf"
+        },
+        {
+          "from": "query_rewrite/granite4.1_3b/lora/Lora-bf16.gguf",
+          "to": "query_rewrite.gguf"
+        }
+      ],
+      "bytes": 394264576,
+      "runtime": "lora",
+      "required": true,
+      "binds": [
+        "cite",
+        "answerable",
+        "rewrite"
+      ],
+      "sha256": {
+        "answerability.gguf": "819d5d10e3fbe2e7ebdce078585afb4477131d991d1ed4a11ce0bbc421273502",
+        "citations.gguf": "40bd48b1b8b776f5a90a482b087c68f01d2f3b4db887886a36603f5fad39ef8c",
+        "hallucination_detection.gguf": "950e7a246564d9eaebc242ed5142b9c27d67b0e9f518f12d27182ee412d5a7b4",
+        "query_clarification.gguf": "9bb08cd41de220424e6cfcd5a2095643831a924cb5b4b7c742784b033360c796",
+        "query_rewrite.gguf": "c312f60f44f6b3997824cadf912b7aa39d7770eb9cd1c7c7589b3a5bc26201f7"
+      },
+      "derived": [
+        "answerability.gguf",
+        "query_clarification.gguf",
+        "query_rewrite.gguf"
+      ]
+    },
+    {
+      "id": "guard",
+      "title": "guardrails",
+      "what": "Adapters that judge a reply before it is shown: safety, factuality, and whether an answer is actually supported by what was retrieved.",
+      "repo": "ibm-granite/granitelib-guardian-r1.0",
+      "files": [],
+      "bytes": 200000000,
+      "runtime": "lora",
+      "required": false,
+      "binds": [
+        "check"
+      ]
+    },
+    {
+      "id": "time",
+      "title": "forecasting",
+      "what": "TinyTimeMixer: a few megabytes that forecast a numeric series without being trained on it. Zero-shot, which is what makes it usable on whatever series the conversation happens to produce.",
+      "repo": "ibm-granite/granite-timeseries-ttm-r2",
+      "files": [
+        "config.json"
+      ],
+      "bytes": 5000000,
+      "runtime": "onnx",
+      "required": false,
+      "binds": [
+        "forecast"
+      ]
+    }
+  ]
+}

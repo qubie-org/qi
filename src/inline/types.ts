@@ -1,4 +1,6 @@
-/** Every glyph toki can drop into the middle of a sentence. */
+import type { Sigil } from '../pages/sigils'
+
+/** Every glyph qi can drop into the middle of a sentence. */
 export const MOTIFS = [
   // No squiggles. A wavy underline means 'spelling error' in every editor
   // anyone has used, so drawing one under a correct word reads as a fault;
@@ -28,6 +30,25 @@ export const isDeco = (s: string): s is DecoKind => (DECOS as readonly string[])
 export type Node =
   | { t: 'text'; v: string }
   | { t: 'em'; kids: Node[] }
+  /**
+   * A thing worth pulling on: a proper noun, or a concept the reply leaned on.
+   *
+   * The marks used to be decoration — a glyph beside a word because the word
+   * resembled an arrow. This is the opposite: a mark means the word *does*
+   * something, and the only thing it does is ask for more about itself.
+   */
+  | { t: 'term'; topic: string; kids: Node[] }
+  /**
+   * An invocation written into the text: `/coin price`, `$something`, `@app`.
+   *
+   * One node for all three sigils rather than three nearly identical ones,
+   * because everything downstream — hit target, colour, press handler — is the
+   * same shape and only the verb differs. `sigil` is what the renderer draws
+   * and what the press dispatches on, so the three namespaces stay
+   * distinguishable without three parallel code paths that can fall out of
+   * step. See `pages/sigils.ts` for what each one means.
+   */
+  | { t: 'invoke'; sigil: Sigil; id: string }
   | { t: 'strong'; kids: Node[] }
   | { t: 'code'; v: string }
   | { t: 'strike'; kids: Node[] }
@@ -53,6 +74,8 @@ export type Node =
       h?: number
       /** Treatment chosen from shape AND surrounding text — see compose.ts. */
       shape?: 'band' | 'wide' | 'tall' | 'inline'
+      /** The small print, shown as a callout when the picture is clicked. */
+      aside?: { title: string; body: string; href?: string; tone?: number }
     }
   /** Where a grounded value came from. Set small — it attributes, it doesn't speak. */
   | { t: 'src'; label: string; href?: string }

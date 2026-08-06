@@ -1,5 +1,5 @@
 /**
- * What toki remembers.
+ * What qi remembers.
  *
  * The talker's context was being *accumulated*: a transcript that grew every
  * turn, plus a fact dump re-injected as a system message each time. That grows
@@ -142,6 +142,22 @@ export class Store {
   private run(sql: string, bind: unknown[] = []): number {
     this.raw.exec({ sql, bind })
     return Number(this.raw.selectValue('select last_insert_rowid()'))
+  }
+
+  /**
+   * The escape hatch, for tables this class does not own.
+   *
+   * Everything above is a named operation because the conversation's shape is
+   * this file's business. The harvest lane's is not — it adds its own table and
+   * its own queries alongside, and giving it these two methods is cheaper than
+   * growing this class every time something wants to remember something new.
+   */
+  query<T = Record<string, unknown>>(sql: string, bind: unknown[] = []): T[] {
+    return this.rows<T>(sql, bind)
+  }
+
+  exec(sql: string, bind: unknown[] = []): number {
+    return this.run(sql, bind)
   }
 
   // ── what was said ───────────────────────────────────────────────────────
@@ -302,8 +318,8 @@ export function openStore(): Promise<Store> {
     const init = sqlite3InitModule as (cfg?: Record<string, unknown>) => Promise<Sqlite3Static>
     const sqlite3 = await init({ print: () => {}, printErr: console.warn })
     try {
-      const pool = await sqlite3.installOpfsSAHPoolVfs({ name: 'toki' })
-      return new Store(new pool.OpfsSAHPoolDb('/toki.sqlite3'))
+      const pool = await sqlite3.installOpfsSAHPoolVfs({ name: 'qi' })
+      return new Store(new pool.OpfsSAHPoolDb('/qi.sqlite3'))
     } catch (err) {
       console.warn('store: no OPFS, memory only', err)
       return new Store(new sqlite3.oo1.DB(':memory:'))

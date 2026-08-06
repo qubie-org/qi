@@ -14,7 +14,7 @@
  * A word with no colour association gets none. Not everything should be
  * coloured, and the ones that are should be the ones that earn it.
  */
-import { cosine, embed, type Table } from './embed'
+import { cosine, embed } from '../model/vectors'
 
 /** Fixed, saturated, mutually unmistakable. Never interpolated between. */
 export const TONES = ['blue', 'red', 'gold', 'green'] as const
@@ -33,12 +33,11 @@ const CONCEPTS: Record<Tone, string[]> = {
 
 export type ToneBank = { tone: Tone; vec: Float32Array }[]
 
-export function buildToneBank(t: Table): ToneBank {
-  const bank: ToneBank = []
-  for (const tone of TONES) {
-    for (const concept of CONCEPTS[tone]) bank.push({ tone, vec: embed(t, concept) })
-  }
-  return bank
+/** Colour concepts, embedded once at boot like every other fixed anchor set. */
+export async function buildToneBank(): Promise<ToneBank> {
+  const pairs = TONES.flatMap((tone) => CONCEPTS[tone].map((concept) => ({ tone, concept })))
+  const vecs = await Promise.all(pairs.map((p) => embed(p.concept)))
+  return pairs.map((p, i) => ({ tone: p.tone, vec: vecs[i] }))
 }
 
 /**

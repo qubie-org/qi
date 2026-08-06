@@ -1,3 +1,4 @@
+import { isSigil } from '../pages/sigils'
 import { downgrade } from './downgrade'
 
 /** Pictographs only — not every symbol, or arrows and dingbats get captured. */
@@ -63,6 +64,33 @@ export function inlineParse(s: string): Node[] {
 
   while (i < s.length) {
     const c = s[i]
+
+    /**
+     * `/name` and `@name`, when they start a word.
+     *
+     * Mid-word each is something ordinary — a path, an email address — and
+     * neither wants to become a chip. So both require a boundary before them,
+     * which is the single rule that keeps "and/or" and "shane@example.com" out
+     * of it.
+     *
+     * Which sigils count is `isSigil`'s business, not this loop's, and that
+     * matters: `$` was a namespace once. Had this rule carried its own list,
+     * removing the namespace would have left a parser still making chips out of
+     * `$name` that resolve to nothing at all.
+     *
+     * The name is deliberately narrow: letters, digits, dash, underscore, dot.
+     * One that swallowed punctuation would take the full stop at the end of the
+     * sentence with it.
+     */
+    if (isSigil(c) && (i === 0 || /[\s(\[]/.test(s[i - 1]))) {
+      const rest = /^[\w.-]+/.exec(s.slice(i + 1))
+      const name = rest?.[0]?.replace(/[.]+$/, '')
+      if (name && name.length >= 2) {
+        push({ t: 'invoke', sigil: c, id: name })
+        i += 1 + name.length
+        continue
+      }
+    }
 
     // Escapes win over everything.
     if (c === '\\' && i + 1 < s.length) {

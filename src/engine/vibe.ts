@@ -5,7 +5,7 @@
  * the turn onto that direction gives a signed reading, and readings are folded
  * into a running state with decay so the room drifts rather than flips.
  */
-import { cosine, embed, type Table } from './embed'
+import { cosine, embed, known, warm } from '../model/vectors'
 import { blend, NEUTRAL, type Vibe } from './theme'
 
 const AXES: Record<keyof Vibe, [string, string]> = {
@@ -29,11 +29,11 @@ const AXES: Record<keyof Vibe, [string, string]> = {
 
 export type Axes = Record<keyof Vibe, Float32Array>
 
-export function buildAxes(t: Table): Axes {
+/** The poles, embedded once at boot — a fixed set of strings, like the bank. */
+export async function buildAxes(): Promise<Axes> {
   const out = {} as Axes
   for (const [name, [lo, hi]] of Object.entries(AXES)) {
-    const a = embed(t, lo)
-    const b = embed(t, hi)
+    const [a, b] = await Promise.all([embed(lo), embed(hi)])
     const d = new Float32Array(a.length)
     let sq = 0
     for (let i = 0; i < a.length; i++) {
@@ -53,8 +53,18 @@ export function buildAxes(t: Table): Axes {
  */
 const GAIN = 4.2
 
-export function read(text: string, t: Table, axes: Axes): Vibe {
-  const v = embed(t, text)
+/**
+ * Null when the sentence has not been embedded yet. The caller keeps whatever
+ * vibe the room already had rather than lurching to neutral for one frame —
+ * a theme that flickers on every new sentence is worse than one that arrives
+ * a beat late.
+ */
+export function read(text: string, axes: Axes): Vibe | null {
+  const v = known(text)
+  if (!v) {
+    warm([text])
+    return null
+  }
   const proj = (a: Float32Array) => Math.max(-1, Math.min(1, cosine(v, a) * GAIN))
   return {
     warmth: proj(axes.warmth),
@@ -69,8 +79,9 @@ export class Drift {
   private state: Vibe = { ...NEUTRAL }
   constructor(private readonly rate = 0.34) {}
 
-  push(text: string, t: Table, axes: Axes): Vibe {
-    this.state = blend(this.state, read(text, t, axes), this.rate)
+  push(text: string, axes: Axes): Vibe {
+    const next = read(text, axes)
+    if (next) this.state = blend(this.state, next, this.rate)
     return this.state
   }
 

@@ -1,8 +1,60 @@
-import { Fragment, useEffect, useRef, type JSX } from 'react'
+import { createContext, Fragment, useContext, useEffect, useRef, useState, type JSX } from 'react'
 import { animate, stagger, svg as animeSvg } from 'animejs'
 import { DECO_SVG } from './Deco'
 import { Motif } from './Motifs'
 import type { Node } from './types'
+import { Callout, type Aside } from './Annotation'
+import { Preview, useHoverPreview, type Previewed } from './Preview'
+import { sound } from '../engine/sound'
+import { find, SIGILS } from '../pages/sigils'
+
+/**
+ * How a picture asks for its callout to be opened.
+ *
+ * A context rather than a prop because `node` is a plain recursive function,
+ * not a component tree — threading a handler through every branch of it to
+ * reach one leaf would be the tail wagging the dog.
+ */
+type AsideHandler = (el: HTMLElement, aside: Aside) => void
+const AsideContext = createContext<AsideHandler | null>(null)
+
+/**
+ * Hovering a picture enlarges it. Same reasoning as the aside context: `node`
+ * is a recursive function rather than a component tree, so the one leaf that
+ * needs a handler reaches for it rather than having it threaded down.
+ */
+type HoverHandler = { enter: (el: HTMLElement, image: Previewed) => void; leave: () => void }
+const HoverContext = createContext<HoverHandler | null>(null)
+
+function Chip({ n }: { n: Extract<Node, { t: 'chip' }> }) {
+  const onAside = useContext(AsideContext)
+  const hover = useContext(HoverContext)
+  return (
+    <img
+      className={`i-chip i-chip--${n.shape ?? 'inline'}`}
+      // The picture's own proportions, never the stylesheet's guess.
+      style={n.w && n.h ? { aspectRatio: `${n.w} / ${n.h}` } : undefined}
+      src={n.src}
+      alt={n.alt}
+      loading="lazy"
+      decoding="async"
+      // Cross-origin isolation is on for Wasmer, and COEP blocks every
+      // third-party image that does not opt in. Requesting it in CORS mode
+      // satisfies that for any host sending Access-Control-Allow-Origin,
+      // which the image sources here do.
+      crossOrigin="anonymous"
+      referrerPolicy="no-referrer"
+      onClick={(e) => {
+        sound(n.aside && onAside ? 'open' : 'mark')
+        return n.aside && onAside ? onAside(e.currentTarget as HTMLElement, n.aside) : navigateTo(n.alt)
+      }}
+      onMouseEnter={(e) =>
+        hover?.enter(e.currentTarget as HTMLElement, { src: n.src, alt: n.alt, w: n.w, h: n.h })
+      }
+      onMouseLeave={() => hover?.leave()}
+    />
+  )
+}
 import { addressOf, SCHEME } from '../pages/space'
 
 /**
@@ -10,7 +62,14 @@ import { addressOf, SCHEME } from '../pages/space'
  * props: `node()` is a plain recursive function, and passing a callback down
  * every branch of it to reach one link type is worse than one listener.
  */
-export const NAVIGATE = 'toki:navigate'
+export const NAVIGATE = 'qi:navigate'
+/** A term was pressed: say more about this. */
+export const EXPAND = 'qi:expand'
+/** A skill was pressed in the text, rather than picked in the composer. */
+export const INVOKE = 'qi:invoke'
+
+const expandOn = (topic: string) => dispatchEvent(new CustomEvent(EXPAND, { detail: topic }))
+const invoke = (verb: string) => dispatchEvent(new CustomEvent(INVOKE, { detail: verb }))
 export const navigateTo = (id: string) =>
   dispatchEvent(new CustomEvent(NAVIGATE, { detail: id }))
 
@@ -46,6 +105,59 @@ function node(n: Node, i: number): JSX.Element {
     case 'em':
       return <span key={k} className="i-em">{kids(n.kids)}</span>
 
+    case 'term':
+      // A press asks for more about it. Nothing else — it does not navigate,
+      // because there is usually nowhere yet to navigate to; the answer is
+      // written when it is asked for.
+      return (
+        <button
+          key={k}
+          type="button"
+          className="i-term"
+          title={`more about ${n.topic}`}
+          onClick={() => {
+            sound('mark')
+            expandOn(n.topic)
+          }}
+        >
+          {kids(n.kids)}
+        </button>
+      )
+
+    /**
+     * `/command`, `$skill`, `@app`.
+     *
+     * One case for all three: the affordance is identical — a small chip you
+     * can press — and only the sigil drawn and the namespace dispatched into
+     * differ. Three cases here would be three places for the sigils to drift
+     * apart from `pages/sigils.ts`, which is the file that is supposed to be
+     * the only answer to what a leading character means.
+     *
+     * An unknown id still renders. The model can write `/weather` at any time,
+     * and a chip that is plainly a chip and does nothing when pressed is more
+     * honest than silently printing it as prose — it says the app knows what
+     * kind of thing that is and does not have one.
+     */
+    case 'invoke': {
+      const known = find(n.id)
+      return (
+        <button
+          key={k}
+          type="button"
+          className={`i-invoke i-invoke--${SIGILS[n.sigil].kind}${known ? '' : ' i-invoke--unknown'}`}
+          title={known ? `${SIGILS[n.sigil].kind}: ${known.name}` : `no ${SIGILS[n.sigil].kind} called ${n.id}`}
+          disabled={!known}
+          onClick={() => {
+            sound(n.sigil === '/' ? 'mode' : 'mark')
+            invoke(`${n.sigil}${n.id}`)
+          }}
+        >
+          <span className="i-sigil">{n.sigil}</span>
+          {known?.name ?? n.id}
+        </button>
+      )
+    }
+
     case 'strong':
       return <span key={k} className="i-strong">{kids(n.kids)}</span>
 
@@ -59,7 +171,7 @@ function node(n: Node, i: number): JSX.Element {
       return <span key={k} className="i-hl">{kids(n.kids)}</span>
 
     case 'link': {
-      // `toki:` addresses stay inside the page; everything else is the web.
+      // `qi:` addresses stay inside the page; everything else is the web.
       const internal = n.href.startsWith(SCHEME)
       return internal ? (
         <a
@@ -96,31 +208,13 @@ function node(n: Node, i: number): JSX.Element {
 
     case 'chip':
       // img5 — a picture riding the baseline. Never a block image. Clicking one
-      // opens the page it belongs to, so an image is an address like anything
-      // else rather than a dead end.
+      // opens a callout about it when it has anything to say, and otherwise
+      // opens the page it belongs to, so an image is never a dead end.
       //
       // Composition follows the picture's real shape rather than forcing every
       // image into one slot: a panorama earns a band, a portrait floats and the
       // text sets around it, a square sits in the line.
-      return (
-        <img
-          key={k}
-          className={`i-chip i-chip--${n.shape ?? 'inline'}`}
-          // The picture's own proportions, never the stylesheet's guess.
-          style={n.w && n.h ? { aspectRatio: `${n.w} / ${n.h}` } : undefined}
-          src={n.src}
-          alt={n.alt}
-          loading="lazy"
-          decoding="async"
-          // Cross-origin isolation is on for Wasmer, and COEP blocks every
-          // third-party image that does not opt in. Requesting it in CORS mode
-          // satisfies that for any host sending Access-Control-Allow-Origin,
-          // which the image sources here do.
-          crossOrigin="anonymous"
-          referrerPolicy="no-referrer"
-          onClick={() => navigateTo(n.alt)}
-        />
-      )
+      return <Chip key={k} n={n} />
 
     case 'src':
       // Attribution, not narration: small, quiet, riding above the baseline.
@@ -169,6 +263,10 @@ const kids = (ns: Node[]) => ns.map(node)
 
 export function River({ nodes, animated = true }: { nodes: Node[]; animated?: boolean }) {
   const ref = useRef<HTMLParagraphElement>(null)
+  // One open at a time. Two callouts with two leaders crossing each other is
+  // exactly the crowding the rest of the page works to avoid.
+  const [open, setOpen] = useState<{ el: HTMLElement; aside: Aside } | null>(null)
+  const preview = useHoverPreview()
 
   useEffect(() => {
     if (!ref.current || !animated) return
@@ -224,8 +322,21 @@ export function River({ nodes, animated = true }: { nodes: Node[]; animated?: bo
   }, [nodes, animated])
 
   return (
-    <p className="river" ref={ref}>
-      {nodes.map(node)}
-    </p>
+    <AsideContext.Provider
+      value={(el, aside) => {
+        // A click means the callout, so the preview gets out of the way rather
+        // than sitting on top of the thing that just opened.
+        preview.hide()
+        setOpen((o) => (o?.el === el ? null : { el, aside }))
+      }}
+    >
+      <HoverContext.Provider value={{ enter: preview.enter, leave: preview.leave }}>
+        <p className="river" ref={ref}>
+          {nodes.map(node)}
+        </p>
+        {open && <Callout anchor={open.el} aside={open.aside} onClose={() => setOpen(null)} />}
+        {preview.shown && <Preview anchor={preview.shown.el} image={preview.shown.image} />}
+      </HoverContext.Provider>
+    </AsideContext.Provider>
   )
 }

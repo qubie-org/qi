@@ -1,7 +1,7 @@
 /**
  * The sandbox.
  *
- * Reducers turn a stranger's API response into the handful of bytes toki is
+ * Reducers turn a stranger's API response into the handful of bytes qi is
  * willing to put on screen. That is untrusted code running over untrusted
  * data, so it runs in QuickJS inside Wasmer: no network, no DOM, no
  * filesystem, no timers — stdin in, stdout out, and a byte cap on the way
@@ -68,6 +68,15 @@ export const FactSchema = v.object({
   /** Attribution, always rendered. */
   src: v.string(),
   srcUrl: v.optional(v.string()),
+  /**
+   * A second, independent source that said the same thing.
+   *
+   * Set only when the API path and the web path were run against the same
+   * question and their answers agreed. It is not rendered — it exists so that
+   * "two unrelated places agree on this" is recorded at the moment it is known,
+   * rather than being a fact about the code that nobody can inspect afterwards.
+   */
+  corroboration: v.optional(v.string()),
   /**
    * The *only* thing the language model is shown. Truncated rather than
    * rejected: an over-long hint is a sloppy reducer, not a reason to lose an
@@ -164,7 +173,7 @@ try {
 
 /**
  * Run `reducerBody` over `payload`. Returns null on any failure — a source
- * that cannot be reduced is a source toki does not speak from.
+ * that cannot be reduced is a source qi does not speak from.
  */
 export async function reduce(reducerBody: string, payload: unknown): Promise<Fact | null> {
   const qjs = await bootSandbox()
