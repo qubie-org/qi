@@ -27,7 +27,7 @@
 import { createHash } from 'node:crypto'
 import { spawn } from 'node:child_process'
 import { createReadStream, createWriteStream } from 'node:fs'
-import { mkdir, open, readdir, rename, rm, stat } from 'node:fs/promises'
+import { mkdir, readFile, readdir, rename, rm, stat, writeFile } from 'node:fs/promises'
 import { createInterface } from 'node:readline/promises'
 import { createServer } from 'node:http'
 import { extname, join, resolve } from 'node:path'
@@ -60,18 +60,20 @@ const yes = !!flag('yes', 'y')
 
 // ── state ────────────────────────────────────────────────────────────────────
 
+// `readFile`, not `open().readFile()`. The latter leaves a FileHandle for the
+// collector, and since Node 22 letting one be garbage-collected while open is
+// an error rather than a warning — so `qiui run` died on startup with
+// ERR_INVALID_STATE, after the model server had already been spawned.
 const readConfig = async () => {
   try {
-    return JSON.parse(await (await open(CONFIG)).readFile('utf8'))
+    return JSON.parse(await readFile(CONFIG, 'utf8'))
   } catch {
     return null
   }
 }
 const writeConfig = async (c) => {
   await mkdir(HOME, { recursive: true })
-  const fh = await open(CONFIG, 'w')
-  await fh.writeFile(JSON.stringify(c, null, 2) + '\n')
-  await fh.close()
+  await writeFile(CONFIG, JSON.stringify(c, null, 2) + '\n')
 }
 const exists = async (p) => {
   try {
@@ -89,16 +91,24 @@ const sizeOf = async (p) => {
   }
 }
 
-/** Which of a plan's files are already on disk and the right size. */
+/**
+ * Which of a plan's files are not here yet.
+ *
+ * Existence is the whole test, and that is not laziness: `fetchFile` downloads
+ * to `.part` and only renames onto the target after the transfer finishes and
+ * the hash matches, so a file at the final path is complete by construction.
+ * There is no state in which a truncated file wears the real name.
+ *
+ * A size check was here and did active harm. `bytes` in the plan is an estimate
+ * used for "about 2.6 GB" before anything is fetched — the real activated
+ * adapters range from 62 to 198 MB against one guess of 90 — so comparing
+ * against it reported four complete files as missing and would have
+ * re-downloaded them on every launch.
+ */
 async function missing(size) {
   const out = []
   for (const item of plan(size)) {
-    const target = join(PACKS, item.pack, item.to)
-    // Size is the cheap check. A file that is short is a download that stopped,
-    // and re-fetching it is correct; the hash is what catches the subtler case.
-    const have = await sizeOf(target)
-    if (have === 0) out.push(item)
-    else if (item.bytes && have < item.bytes * 0.98) out.push(item)
+    if ((await sizeOf(join(PACKS, item.pack, item.to))) === 0) out.push(item)
   }
   return out
 }
