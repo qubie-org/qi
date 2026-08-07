@@ -1,0 +1,22 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "qi",
+  "version": "0.1.0",
+  "description": "Work on qi — a local-first text river running Granite 4.1, with research that verifies its own citations and a standalone Mac app. Covers setup, editing the codebase, the model cards, adapter conversion, the research process, and shipping.",
+  "author": {
+    "name": "qubie-org",
+    "url": "https://github.com/qubie-org"
+  },
+  "homepage": "https://github.com/qubie-org/qi",
+  "repository": "https://github.com/qubie-org/qi",
+  "license": "AGPL-3.0-or-later",
+  "keywords": [
+    "qi",
+    "granite",
+    "llama.cpp",
+    "local-first",
+    "rag",
+    "alora",
+    "research"
+  ]
+}
