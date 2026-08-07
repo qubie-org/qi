@@ -439,7 +439,15 @@ export default function App() {
       }
 
       // The first fact found is the one cited; later steps refined it.
-      const fact = facts[0] ?? null
+      // A picture wins the slot.
+      //
+      // This was `facts[0]`, which is right when a turn produces one fact and
+      // silently wrong when it produces several: the image arrived second and
+      // never rendered, so a photograph that had been fetched, decoded and
+      // measured was dropped one step from the screen. Only one fact can take
+      // the sentence, and when one of them is something to look at, it is the
+      // one worth showing.
+      const fact = facts.find((f) => f.chip) ?? facts[0] ?? null
       // If the model is unreachable a fact it managed to fetch still answers.
       if (!reply) reply = fact ? fact.value : 'no local model server is running.'
 

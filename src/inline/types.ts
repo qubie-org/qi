@@ -106,9 +106,18 @@ export function plain(nodes: Node[]): string {
       case 'emoji': break
       case 'src': break
       case 'chip': s += n.alt; break
+      // A named command reads as what it is called. It has no `kids`, and
+      // without this it fell to the default and handed `undefined` to a `for
+      // of` — which took the whole app down with "undefined is not an object",
+      // attributed to this file and caused by whichever reply happened to
+      // mention a command. Every leaf below is spelled out for that reason.
+      case 'invoke': s += `${n.sigil}${n.id}`; break
       // An unresolved slot still reads as its intent.
       case 'slot': s += n.kids.length ? plain(n.kids) : n.intent; break
-      default: s += plain((n as { kids: Node[] }).kids)
+      // Anything with children flattens through them; anything without is a
+      // leaf this switch has not been taught yet, and a missing case must not
+      // be a crash.
+      default: s += plain((n as { kids?: Node[] }).kids ?? [])
     }
   }
   return s
