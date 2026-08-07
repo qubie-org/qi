@@ -25,6 +25,7 @@
  * the OPFS backend needs.
  */
 import sqlite3InitModule, { type Database, type Sqlite3Static } from '@sqlite.org/sqlite-wasm'
+import { flush, load, save } from './persist'
 
 export type Role = 'user' | 'agent'
 export type StepState = 'running' | 'done' | 'failed'
@@ -139,9 +140,21 @@ export class Store {
     return (this.raw.exec({ sql, bind, rowMode: 'object', returnValue: 'resultRows' }) ?? []) as T[]
   }
 
+  /** True once the host is keeping this store on disk; see `persist.ts`. */
+  persisting = false
+
   private run(sql: string, bind: unknown[] = []): number {
     this.raw.exec({ sql, bind })
+    // Every write in this class goes through here, so one hook covers all of
+    // them — and because the save is debounced, a turn that writes five rows
+    // still costs one request.
+    if (this.persisting) save(this)
     return Number(this.raw.selectValue('select last_insert_rowid()'))
+  }
+
+  /** Write now and wait. For the moment before the window goes. */
+  async flush(): Promise<void> {
+    if (this.persisting) await flush(this)
   }
 
   /**
@@ -317,13 +330,28 @@ export function openStore(): Promise<Store> {
     // logging its banner to the console on every load.
     const init = sqlite3InitModule as (cfg?: Record<string, unknown>) => Promise<Sqlite3Static>
     const sqlite3 = await init({ print: () => {}, printErr: console.warn })
+    // OPFS first, and it will not work here.
+    //
+    // WebKit gives this webview an origin-private filesystem it can enumerate
+    // and cannot write: `createSyncAccessHandle` and `createWritable` are both
+    // undefined, and SQLite's OPFS backends need one of them. The attempt is
+    // kept because other runtimes do support it — but the fallback is the
+    // normal path here, not the exception, and it used to mean losing every
+    // turn on reload behind a console warning nobody read.
+    let store: Store
     try {
       const pool = await sqlite3.installOpfsSAHPoolVfs({ name: 'qi' })
-      return new Store(new pool.OpfsSAHPoolDb('/qi.sqlite3'))
-    } catch (err) {
-      console.warn('store: no OPFS, memory only', err)
-      return new Store(new sqlite3.oo1.DB(':memory:'))
+      store = new Store(new pool.OpfsSAHPoolDb('/qi.sqlite3'))
+    } catch {
+      store = new Store(new sqlite3.oo1.DB(':memory:'))
+      // The host keeps the file instead. Loading is best-effort: no host and no
+      // snapshot both mean an empty conversation, which is the correct first
+      // run and must never stop the app opening.
+      const rows = await load(store)
+      if (rows) console.info(`store: restored ${rows} rows from the host`)
+      store.persisting = true
     }
+    return store
   })()
   return booting
 }

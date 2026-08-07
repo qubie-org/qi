@@ -22,8 +22,8 @@
  */
 import { spawn } from 'node:child_process'
 import { createReadStream, existsSync, statSync } from 'node:fs'
-import { appendFile, mkdir, readFile } from 'node:fs/promises'
-import { extname, join, resolve } from 'node:path'
+import { appendFile, mkdir, readFile, writeFile } from 'node:fs/promises'
+import { dirname, extname, join, resolve } from 'node:path'
 import type { Plugin, ViteDevServer } from 'vite'
 import { handleNet } from './net'
 import { handleRender } from './render'
@@ -70,6 +70,47 @@ export function packsPlugin(root: string): Plugin {
       // The escalation rung: a page whose content only exists after its own
       // JavaScript has run. One door, guarded exactly as /net/fetch is —
       // see tools/render.ts.
+      // The conversation, kept by the host because the page cannot keep it.
+      //
+      // WebKit hands this webview an origin-private filesystem it can list and
+      // cannot write — `createSyncAccessHandle` and `createWritable` are both
+      // undefined — so SQLite's OPFS backends cannot work and the store has
+      // been silently running in memory, discarding every turn on reload.
+      //
+      // In the shipped app the Swift host answers these two routes against
+      // Application Support. Here it is a file beside the project, so a
+      // developer's conversation survives a restart the same way.
+      if (url === '/store/snapshot') {
+        const file = resolve(root, '.qi', 'snapshot.json')
+        if (req.method === 'GET') {
+          try {
+            res.setHeader('content-type', 'application/json')
+            res.end(await readFile(file, 'utf8'))
+          } catch {
+            // Nothing saved yet is not an error; it is the first run.
+            res.statusCode = 404
+            res.end('{}')
+          }
+          return
+        }
+        if (req.method === 'PUT') {
+          const chunks: Buffer[] = []
+          req.on('data', (c: Buffer) => chunks.push(c))
+          req.on('end', async () => {
+            try {
+              await mkdir(dirname(file), { recursive: true })
+              await writeFile(file, Buffer.concat(chunks))
+              res.statusCode = 204
+            } catch (err) {
+              console.warn('store: could not save snapshot —', err)
+              res.statusCode = 500
+            }
+            res.end()
+          })
+          return
+        }
+      }
+
       if (url === '/net/render' && req.method === 'POST') {
         await handleRender(req, res)
         return

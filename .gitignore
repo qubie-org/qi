@@ -30,3 +30,7 @@ packs/mlx/
 # Converted adapters, staged for a release rather than tracked. They are large,
 # and the release is where they live.
 packs/rag8b/
+
+# The dev server's copy of the conversation. The shipped app keeps its own in
+# Application Support; this is the same file for someone running `bun run dev`.
+.qi/
