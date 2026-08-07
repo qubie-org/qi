@@ -20,54 +20,62 @@ run locally, and the only network traffic is the pages you asked it to read.
 /research    investigates a question and leaves a note, with sources
 /present     the same process, laid out as slides that carry their citations
 /goal        keeps working until a second opinion agrees it is finished
-/dj          puts a set on underneath, and the interface re-tunes to its key
+/dj          writes a Strudel set and puts it on underneath the conversation
 /note /deck  the things you have made
 @            find one of them
 ```
 
 ## What this is
 
-**A research project for learning about local LLMs.** Not a product. It is a
-place to watch a 3B model succeed and fail at a real task, with the failures
-written down in the code beside the fix they forced. A few of them:
+**A research project for learning about local LLMs.** Not a product — a place
+to see how far a 3B model gets on real work when the process around it is built
+to let it try things and then check them.
 
-- Extraction was one call: emit the index of a sentence, then summarise that
-  sentence. Asked to dereference its own pointer into forty candidates, the
-  model summarised a *different* sentence than the one it cited — or copied the
-  sentence verbatim and called it a finding. Splitting it into pick-then-
-  summarise took the echo rate from 60% to zero, and ran three times faster,
-  because a model that cannot continue stops generating.
-- Asked who founded Hugging Face and shown a sentence from the Moonshot AI page,
-  it wrote *"Hugging Face was founded in March 2023 by three former schoolmates
-  from Tsinghua University"* — every name correct, every date correct, the
-  company swapped for the one in the question, under a citation that
-  contradicted it.
-- The trained gate that decides whether a page answers the question at all is
-  right about half the time. It was read one rejection at a time to find that
-  out. It is right about the things that matter most, and wrong expensively:
-  `caffeine effect on marathon performance` returned nothing while a source it
-  had refused said plainly that caffeine improves endurance performance.
-- Asked to name the field of a terse question before searching, it guessed and
-  then conditioned faithfully on its guess: `mamba vs transformers` became the
-  Mamba video game engine and the Transformers franchise, `moe routing collapse`
-  went to networking, `rope scaling long context` produced "dynamic rope
-  climbing". Shown its own search results so it would not have to guess, it
-  stopped guessing and started copying — the angles came back as verbatim page
-  titles.
-- Told "quote the words that support it, copied exactly, do not tidy it", it
-  returned *"Speculative decoding is a technique used to improve the efficiency
-  of language models"* — fluent, accurate, and nowhere in the source. Three of
-  five sources failed the same way.
-- With an early system prompt that opened "You answer in very few words", it
-  answered "what is the weather in reykjavik" with a single sun emoji and called
-  no tool at all. Asked to be brief above everything, a 3B obliges.
+What it does:
 
-The pattern is consistent enough to be a rule: every fix that worked took
-latitude away. A grammar the model cannot violate, a filter over what it
-produced, one call split into two smaller ones. So the process is code and the
-judgement is the model's — grammar-constrained struct-filling where judgement is
-needed, plain control flow where it is not, and where a wrong answer can be made
-unexpressible, that beats asking for a right one.
+- **Researches a question and leaves a note.** Nine engines per angle, pages
+  read and gated, and every claim it keeps carries a quote that occurs
+  *literally* in the page it cites. The comparison forgives curly quotes and
+  stray spacing and forgives nothing else, so a paraphrase cannot become a
+  citation.
+- **Turns the same process into slides.** `/present` runs the research and lays
+  it out as a deck where each slide still carries the sources behind it.
+- **Keeps going until something else agrees it is done.** `/goal` works, then
+  asks for a second opinion, and only stops when that opinion says so.
+- **Composes music from a sentence.** `/dj` writes real Strudel — patterns,
+  polyrhythm, chord voicings, delay — and puts a set on underneath the
+  conversation. The interface re-tunes to its key while it plays.
+- **Runs entirely on the machine.** The model, the embedder and the retrieval
+  adapters are all local. The only network traffic is the pages you asked it to
+  read.
+- **Answers some questions without the model at all.** Weather, currency, a
+  coin price, a picture — a shortcut past generation to the thing that actually
+  knows, which is both faster and correct more often.
+
+What it is allowed to do, which is the more interesting half:
+
+The rule that came out of building this is **generate freely, then check
+mechanically**. A small model is good at producing candidates and unreliable at
+policing itself, so nothing here asks it to. It may say anything; what survives
+is decided by code that has no model in it.
+
+- The research process lets the model write any claim it likes, and keeps the
+  ones whose quote is in the source.
+- `/dj` lets it write any Strudel it likes, and plays the patterns whose sounds
+  are registered, whose code evaluates against Strudel's own exports, and which
+  produce events. Names it invents get swapped for real ones rather than
+  throwing away the arrangement around them.
+- Where a wrong answer can be made *unexpressible* rather than caught, it is:
+  grammar-constrained struct-filling, a fixed vocabulary, a hard stop at a
+  terminal token.
+
+That split is why the model is given a long leash. Checking is cheap and
+specific, so it can be trusted with the parts that need judgement — and the
+parts that need to be right are not left to judgement at all.
+
+The failures behind each of those decisions are written down in the code, next
+to the fix they forced. `src/ground/research.ts` and `src/engine/verify.ts` are
+the two worth reading.
 
 **A creative, minimalist approach to UX.** There are no chat bubbles, no
 sidebar, no settings panel and no message list. There is one river of text and
@@ -82,7 +90,13 @@ past the model. Typography, colour and sound are all derived from the same
 reading of the conversation rather than configured. See
 [The interface](#the-interface).
 
-<!-- third framing -->
+**Everything in one piece, on your machine.** One install, one directory, no
+account and no key. `npx @qi-ui/cli setup` asks which size you want and fetches
+it; the Mac app carries its own model server and puts the weights and the
+conversation next to each other in Application Support, at paths you can find
+and copy. The pack catalogue is one file that the installer and the app both
+read, so the two can never disagree about what is on disk, and every download is
+checked against a hash before it is used.
 
 ## Install
 
@@ -239,12 +253,12 @@ a note listing only what it found reads as complete whether or not it is, and
 
 ### The evaluation
 
-Every question the process was measured against while it was being fixed was a
-machine-learning paper. Six prompts, one domain, and several decisions are
-visibly shaped by it — the LaTeX stripper exists because of arXiv, the sentence
-length bounds are paper prose, first-person text was rejected as opinion when an
-interview or a field report *is* first person. None of those were wrong when
-they were made. That is what overfitting looks like from the inside.
+The process was built against machine-learning papers — six prompts, one
+domain — and several decisions carry the shape of that: the LaTeX stripper
+exists because of arXiv, the sentence-length bounds are paper prose, first-person
+text was read as opinion when an interview or a field report *is* first person.
+Each was a reasonable call on the evidence available. The evaluation exists to
+widen that evidence.
 
 `src/ground/__tests__/domains.ts` is 22 terse questions across ten domains,
 grouped by which part of the pipeline each one stresses rather than by subject:
@@ -341,36 +355,6 @@ whatever was just said.
 | `skills/`, `plugin.json`, `mcp.json` | an [Agent Plugin](https://agent-plugins.org) — seven progressive-disclosure skills for an agent working on this repository, and the MCP server that drives the running app |
 | `train/`, `.stage/` | earlier research lanes — the pre-Granite stack and an HDC bench. Nothing in the app imports them |
 
-## What does not work yet
-
-- **Images.** Retrieval is wired end to end: Openverse is one of the ten
-  sources, a picture-shaped sentence is routed to it ahead of everything else
-  with no margin to beat, and the renderer draws the result as a chip on the
-  baseline. What breaks is the model. Asked for a picture it will often decline
-  to call the tool and answer that it has no ability to display images.
-- **30b has no activated adapters.** The GGUF conversions for 3b and 8b are this
-  project's own; nobody has done 30b. Until someone does, that size runs the
-  plain LoRA and the gate costs seconds per source instead of 0.04s, which is a
-  real difference in how the app feels.
-- **8b has never actually been run.** Its base weights and all three converted
-  adapters are hash-verified and the adapters carry the same invocation tokens
-  as the working 3b files, which is why the activated gate should work. Should.
-  Every number in this README came from 3b.
-- **The Mac app is signed but not notarised.** `native/build.sh` signs ad-hoc by
-  default and will produce a notarizable bundle if `QI_SIGN_ID` names a
-  Developer ID — hardened runtime and secure timestamp included. Nothing in this
-  repository submits it. Gatekeeper will complain on a machine that did not
-  build it.
-- **The gate is right about half the time**, and that is the largest single
-  known defect in the research process rather than a settled design. `offTopic`
-  is 40% of every source fetched.
-- **llama.cpp version sensitivity.** `--lora-init-without-apply` is documented to
-  load adapters without applying them, and in b10250 it does not: every adapter
-  reports scale 1.0, five rank-32 deltas stack, and the model emits
-  `<tool_call></tool_response>` forever. It passes no test and fails no startup
-  check. The app zeroes every scale once the server answers, which works, and
-  which is a workaround for a bug that may move.
-
 ## Building from source
 
 ```sh
@@ -404,6 +388,26 @@ The page is served over loopback rather than `file://` because the wasm sandbox
 needs a SharedArrayBuffer, which the browser only hands to a cross-origin
 isolated document, and isolation is granted on the strength of response headers
 that `file://` has no responses to carry.
+
+## Known limitations
+
+Current, and none of them a surprise — this is a 3B model on a laptop.
+
+- Every number here was measured against `3b`. `8b` installs and is
+  hash-verified but has not been run.
+- `/dj` writes a set in about 40 seconds on the wasm backend. Without the
+  strudel pack it arranges one from presets instead, instantly.
+- The answerability gate is right about half the time. It is right about the
+  cases that matter most, and the note says what it discarded and why.
+- Pictures are retrieved and drawn directly rather than through the model,
+  which declines to call the tool about as often as not.
+- The Mac app signs ad-hoc by default. Point `QI_SIGN_ID` at a Developer ID for
+  a notarizable bundle; nothing here submits it for you.
+- Adapters are pinned to llama.cpp b10250. `--lora-init-without-apply` does not
+  hold in that build, so the app zeroes every scale itself once the server
+  answers.
+- 30b is not offered. Its download plan carried no checksums, and an
+  unverifiable 17.5 GB fetch is not worth the convenience.
 
 ## Licence
 
