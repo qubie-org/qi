@@ -157,11 +157,11 @@ body {
   line-height: 1.04;
   text-wrap: pretty;
   hyphens: none;
-  /* A measure, not a container width. Display type wants ~28 characters a
-     line — the references break every 4–5 words, not every 19. A serif sets
-     narrower than the sans did, so the measure grows slightly to keep roughly
-     the same number of words to a line. */
-  max-width: 30ch;
+  /* No measure here. `.turn` owns the column width for both voices — see the
+     rule near the end of this file — and a second constraint on the same axis
+     is one too many. This used to be `30ch`, which is why widening `.turn`
+     kept having no visible effect: the inner element was still holding the
+     text at its own, much smaller, idea of a line. */
   /* Nothing — not a URL, not an identifier — may push past the measure. */
   overflow-wrap: anywhere;
 }
@@ -189,7 +189,12 @@ body {
 
 
 .turn-user .river {
-  max-width: 38ch; /* secondary voice, so it may run a little longer */
+  /* And not here either, for the same reason — with the additional problem
+     that this selector is more specific than `.river`, so it went on winning
+     against every attempt to widen the column from the outside. What you typed
+     now runs to the same edge the answer does; it stays the secondary voice by
+     being smaller, lighter and right-aligned, which is what was doing the work
+     anyway. */
   font-size: clamp(1.05rem, 2.4vw, 1.65rem);
   font-weight: 300;
   letter-spacing: -0.018em;
@@ -1642,7 +1647,7 @@ body {
    flush left and only weight to tell them apart, a long question and the answer
    under it read as one block of text. */
 .stage { align-items: center }
-.turn { width: 100%; max-width: 30ch; margin-inline: auto }
+.turn { width: 100%; margin-inline: auto }
 .turn-user .river { text-align: right; margin-left: auto }
 .turn-agent .river { text-align: left; margin-right: auto }
 
@@ -1653,8 +1658,8 @@ body {
    because an input wants more room than 30 characters, and only its axis
    moves. */
 .composer { align-items: center }
-.composer-field { margin-inline: auto; max-width: 46ch }
-.picker { margin-inline: auto; max-width: 46ch }
+.composer-field { margin-inline: auto }
+.picker { margin-inline: auto }
 
 /* ── threads, as one key ─────────────────────────────────────────────────────
    Two loose glyphs beside the status read as decoration and crowded the badges
@@ -1732,18 +1737,26 @@ body {
    a surround. So the column widens; display type still wants a short line, but
    short relative to the page rather than to a phone. */
 /* Width in rem, not ch.
+
+   68vw was still leaving the column narrower than the room it had. The stage
+   insets by clamp(1.5rem, 5vw, 5rem), so on a 1240px window the available box
+   is 1116px and a 68vw column used 843 of it — 273px of margin inside margin.
+   84vw takes 1042 of that 1116, which is the column using its own container.
+
+   The rem cap does the opposite job and matters on a large display: past about
+   1216px a line of this display serif stops being comfortable to read, so the
+   column stops growing and the window grows around it instead.
    `ch` is relative to the font size, and the two kinds of turn are set at very
    different sizes — an agent's display serif against a much smaller sans for
    what you typed. One `ch` value therefore produced two different columns, and
    the narrower of them set the tone. A fixed measure with a viewport cap gives
    both the same edges, and lets the column actually use the window. */
-.river { max-width: none }
-.turn { max-width: min(58rem, 68vw) }
+.turn { max-width: min(76rem, 84vw) }
 /* The same measure as the river, and the same padding under it.
    Matching `max-width` was not enough: the stage insets its column with
    `clamp(1.5rem, 5vw, 5rem)` and the composer used a narrower inset of its own,
    so two boxes of identical width still centred 29px apart. A centred element
    inherits its parent's padding into where its centre lands, which is easy to
    forget precisely because the widths look equal. */
-.composer-field, .picker { max-width: min(58rem, 68vw) }
+.composer-field, .picker { max-width: min(76rem, 84vw) }
 .composer { padding-inline: clamp(1.5rem, 5vw, 5rem) }
