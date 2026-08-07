@@ -11,10 +11,10 @@
 
 **A text river with a 3B model in it, running on your own machine.**
 
-One line of text. You type into it, and answers arrive in the same line — no
-chat bubbles, no sidebar, no message list. The model, the embedder and the
-retrieval adapters are all local, and the only network traffic is the pages you
-asked it to read.
+Every local-AI app is the same app: a chat window, gray bubbles, and a small
+model doing its best impression of a big one. qi is what happens when you design
+*for* the small model instead — give it real work, check everything it says, and
+let the page do things a chat window has never bothered to do.
 
 ```
 /research    investigates a question and leaves a note, with sources
@@ -24,34 +24,46 @@ asked it to read.
 @            find one of them
 ```
 
-## Why it is worth a look
+## What it does that nothing else does
 
-**Answers cannot invent their sources.** Every claim the research process keeps
-carries a quote that occurs *literally* in the page it cites. The check forgives
-curly quotes and stray spacing, and forgives nothing else — so a paraphrase can
-never become a citation.
+**Research you can audit.** Ask a question and `/research` fans out across nine
+search engines, reads the pages, and keeps only the claims whose supporting
+quote appears word-for-word in the source. If the model paraphrases, the claim
+dies. You get a note with receipts — and a footer that tells you what it threw
+away and why.
 
-**Colour means something.** Each accented word is embedded and matched against
-colour concepts, so "ocean" is blue because oceans are blue and "fire" is red
-because fire is red. A word with no colour association simply does not get one.
-No model is involved and nothing is random: the same sentence always decorates
-the same way.
+**A DJ in residence.** Ask `/dj` for a deep late-night set and a
+135-million-parameter model writes actual Strudel — polyrhythm, chord voicings,
+delay lines — then plays it under your conversation. Every set is written on the
+spot; nobody has ever heard it before.
 
-**The room is in tune.** The conversation is read as four numbers — warmth,
-energy, gravity, wonder — and those pick a tonic, a mode and a tempo. Every
-sound the interface makes is a degree of that scale, synthesised as it plays, so
-nothing can clash. With one deliberate exception: a mistake plays a flat second,
-the sharpest dissonance available, which makes it the only sound in the app that
-carries information.
+**A page that reads the room.** Colour, typography and sound all derive from
+what the conversation means. Write "ocean" and it turns blue, because oceans are
+blue. Every click and keystroke is a note in a key set by the mood of the
+thread, so the interface literally cannot play a wrong note — the only
+dissonance in the whole app is the sound of a mistake.
 
-**It writes music rather than picking it.** `/dj` composes actual Strudel —
-polyrhythm, chord voicings, delay — from a sentence, and the interface re-tunes
-to its key while the set plays.
+**Text that stays in the river.** No walls of markdown. Headings, tables and
+code fences are folded back into the line before they render, so an answer reads
+like a sentence somebody wrote to you, not a document somebody generated at you.
 
-**Everything is one river.** Models emit Markdown whether you ask them to or
-not, so every block construct is folded back inline before it renders. Headings
-keep their emphasis and lose their box. Tables become cells joined by a dot. A
-code fence becomes inline code. Nothing is dropped; it changes shape.
+**Nothing phones home.** No account, no API key, no telemetry. The model, the
+embedder and the search adapters all run on your machine, and the only network
+traffic is the pages you asked it to read.
+
+## Try it
+
+```sh
+npx @qi-ui/cli setup     # one question: which size
+npx @qi-ui/cli run       # starts the model, opens the page
+```
+
+Or take the Mac app from [releases](https://github.com/qubie-org/qi/releases) —
+it carries its own model server, and keeps the weights and your conversations in
+Application Support at paths you can find and copy.
+
+Two sizes: `3b` is the one everything here was measured against and the right
+default, and `8b` gives better answers if you have the memory for it.
 
 ## How a turn works
 
@@ -73,20 +85,6 @@ flowchart LR
 Nothing hands raw text back to the model. Every result is compressed to a single
 line before it reaches the agent, which is what lets a 3B model take several
 steps without losing the thread.
-
-## Install
-
-```sh
-npx @qi-ui/cli setup     # choose a size, fetch it
-npx @qi-ui/cli run       # start the model server and open the page
-```
-
-Or take the Mac app from [releases](https://github.com/qubie-org/qi/releases) —
-it carries its own model server, and keeps the weights and your conversations in
-Application Support at paths you can find and copy.
-
-Two sizes: `3b` is the one everything here was measured against and the right
-default, and `8b` gives better answers if you have the memory for it.
 
 ## Requirements
 
