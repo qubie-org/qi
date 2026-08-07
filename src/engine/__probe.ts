@@ -18,3 +18,10 @@
  * It has to be the one the app is holding.
  */
 export { getAudioContext, getSuperdoughAudioController, superdough } from 'superdough'
+
+// The Strudel surface, for deciding what a generated pattern may name. Only
+// reachable through a module the bundler resolved — a bare specifier in an
+// /eval has no import map to resolve against.
+export * as core from '@strudel/core'
+export * as webaudio from '@strudel/webaudio'
+export { soundMap } from 'superdough'

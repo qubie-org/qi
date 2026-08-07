@@ -80,6 +80,11 @@ const TOOL_DESCRIPTIONS: Record<string, { name: string; description: string; par
     description: 'Find a painting by subject.',
     param: ['subject', 'what the artwork shows'],
   },
+  sound: {
+    name: 'search_sounds',
+    description: 'Find a recording of a sound.',
+    param: ['subject', 'what the recording is of'],
+  },
 }
 
 /** Sources with no argument to extract — needle is skipped for these. */
@@ -347,6 +352,84 @@ export const SOURCES: Source[] = [
         candidates: hits.map(function (r) {
           return { label: name(r), value: credit(r), chip: r.thumbnail,
                    chipW: r.width, chipH: r.height };
+        })
+      };`,
+  },
+
+  {
+    /**
+     * Recordings. The same index as `image`, the other half of its catalogue.
+     *
+     * `/v1/audio/` takes no key either — verified against the live endpoint,
+     * 240 results for "drum loop" with no auth — and returns creator, licence,
+     * landing page and a direct file URL for every hit, which is the only kind
+     * of audio source that can be played without lying about where it came from.
+     *
+     * This is the *lookup* path: it answers "is there a recording of a
+     * nightingale" with a name, a credit and a link. It deliberately does not
+     * download or analyse anything, because a router that fetches half a
+     * megabyte to answer a question nobody asked twice is a router that makes
+     * the app feel broken. Playing a found sound is `engine/crate.ts`, which is
+     * reached from `$dj` where somebody has already asked for music.
+     *
+     * Anchors are about *recordings*, not about sound in general. "audio" or
+     * "listen" would swallow every question about music, hearing and speakers,
+     * and the encyclopedia answers those far better than a search index does.
+     */
+    id: 'sound',
+    anchors: [
+      'a recording of a sound',
+      'a sound effect or sample',
+      'field recording of an animal or place',
+      'a drum loop or music clip',
+    ],
+    arg: (t) =>
+      topic(t)
+        .replace(/^(find|get|play|give me)\s+/i, '')
+        .replace(/^(a|an|the)\s+/i, '')
+        .replace(/^(sound|audio|recording|sample|clip)s?\s+(of|for)\s+/i, '')
+        .trim(),
+    /**
+     * Widened exactly as the image source is, and for the same measured reason:
+     * Openverse ANDs every term, so a whole sentence matches nothing and the
+     * question falls through to whichever source answers next.
+     */
+    fetch: async (a) => {
+      const words = a.split(/\s+/).filter(Boolean)
+      const tries = [words, words.slice(0, 3), words.slice(0, 2), words.slice(0, 1)]
+        .map((w) => w.join(' '))
+        .filter((q, i, all) => q && all.indexOf(q) === i)
+
+      for (const q of tries) {
+        const body = (await json(
+          `https://api.openverse.org/v1/audio/?q=${encodeURIComponent(q)}` +
+            `&page_size=4&mature=false&license_type=commercial,modification`,
+        )) as { results?: unknown[] } | null
+        if (body?.results?.length) return body
+      }
+      return null
+    },
+    reducer: `
+      var hits = (data.results || []).filter(function (r) { return r && r.url; });
+      if (!hits.length) return null;
+      var name = function (r) { return r.title || r.creator || 'untitled'; };
+      var credit = function (r) {
+        return (r.creator ? r.creator + ' · ' : '') + (r.license || '').toUpperCase();
+      };
+      // Openverse reports duration in milliseconds and is often missing it
+      // entirely, so it is a quantity when it exists and absent when it does
+      // not, rather than a zero that reads as a real measurement.
+      var secs = hits[0].duration ? hits[0].duration / 1000 : null;
+      return {
+        label: name(hits[0]),
+        value: credit(hits[0]),
+        src: 'openverse',
+        srcUrl: hits[0].foreign_landing_url,
+        hint: name(hits[0]) + ' by ' + (hits[0].creator || 'unknown'),
+        quantities: secs ? [{ n: secs, unit: 'second', precision: 0,
+                              path: 'results.0.duration', raw: hits[0].duration }] : undefined,
+        candidates: hits.map(function (r) {
+          return { label: name(r), value: credit(r) };
         })
       };`,
   },

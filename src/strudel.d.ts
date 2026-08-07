@@ -33,6 +33,16 @@ declare module 'superdough' {
   export function getAudioContext(): AudioContext
 
   /**
+   * Every sound name Strudel will answer to, right now.
+   *
+   * A store, not a constant, and the distinction is the whole reason a
+   * generated pattern has to be checked late: synths register eagerly, sample
+   * banks only once their network fetch lands. Read at startup it holds 19
+   * names and no drums at all.
+   */
+  export const soundMap: { get(): Record<string, unknown> }
+
+  /**
    * The output graph superdough is really playing into.
    *
    * Declared for one reason: measuring. An analyser on the final gain reads the

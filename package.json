@@ -39,7 +39,7 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "preview": "vite preview",
-    "test": "bun src/packs/__tests__/bpe.ts && bun src/model/__tests__/tighten.ts && bun src/inline/__tests__/smoke.ts && bun src/engine/__tests__/place.ts && bun src/pages/__tests__/space.ts && bun src/ground/__tests__/route.ts && bun src/ground/__tests__/leaf.ts && bun src/ground/__tests__/quantity.ts && bun src/inline/__tests__/live.ts && bun src/pages/__tests__/sigils.ts && bun src/apps/deck/__tests__/render.ts && bun src/ground/__tests__/invents.ts",
+    "test": "bun src/packs/__tests__/bpe.ts && bun src/model/__tests__/tighten.ts && bun src/inline/__tests__/smoke.ts && bun src/engine/__tests__/analyse.ts && bun src/engine/__tests__/arrange.ts && bun src/engine/__tests__/place.ts && bun src/pages/__tests__/space.ts && bun src/ground/__tests__/route.ts && bun src/ground/__tests__/leaf.ts && bun src/ground/__tests__/quantity.ts && bun src/inline/__tests__/live.ts && bun src/pages/__tests__/sigils.ts && bun src/apps/deck/__tests__/render.ts && bun src/ground/__tests__/invents.ts",
     "pull": "bash tools/pull.sh",
     "serve": "bash tools/serve.sh",
     "check": "bash tools/check.sh",
