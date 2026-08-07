@@ -40,3 +40,7 @@ packs/rag8b/
 # The dev server's copy of the conversation. The shipped app keeps its own in
 # Application Support; this is the same file for someone running `bun run dev`.
 .qi/
+
+# The banner's Remotion project builds into its own tree.
+docs/banner/node_modules/
+docs/banner/out/

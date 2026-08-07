@@ -1,4 +1,6 @@
-<!-- banner -->
+<p align="center">
+  <img src="docs/banner.gif" alt="qi: typing /research into the line, and the answer arriving in the same line, with its source" width="100%">
+</p>
 
 # qi
 
