@@ -14,7 +14,13 @@ tools/out/
 public/apis/
 public/emoji/
 telemetry/
-packs/
+# Anchored, and it has to be. Unanchored, `packs/` matches a directory of that
+# name at *any* depth — so it also swallowed `src/packs/`, the four modules that
+# bind a pack to a verb. Those were never committed, and a fresh clone of the
+# published repository therefore did not build: `Cannot find module
+# '../packs/embed'`, four times. The weights are what belong outside history,
+# not the code that loads them.
+/packs/
 
 # Build artefacts. The DMG is 2.3 GB and the app bundle 140 MB — both are
 # outputs of native/build.sh and neither belongs in history, where they cannot
