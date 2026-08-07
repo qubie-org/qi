@@ -116,41 +116,86 @@ const TOOLS = {
 const text = (s) => ({ content: [{ type: 'text', text: s }] })
 
 // ── JSON-RPC over stdio ────────────────────────────────────────────────────
-// Content-Length framing, the same as LSP. Messages can share a chunk or be
-// split across chunks, so the buffer is drained in a loop rather than parsed
-// once per `data` event.
+//
+// One message per line. This is the whole transport, and it is worth stating
+// plainly because the first version of this file got it wrong in a way that
+// produced no error anywhere.
+//
+// It used Content-Length framing "the same as LSP". LSP does work that way, and
+// MCP looks enough like LSP that the assumption survives a read-through. MCP's
+// stdio transport is newline-delimited JSON: messages are separated by `\n` and
+// may not contain an embedded one. So the server sat waiting for a `\r\n\r\n`
+// header that no client has ever sent, and every client sat waiting for an
+// `initialize` response that was never coming. No crash, no log line, no
+// timeout — just two processes waiting for each other. Both framings were
+// tested against this file; the LSP one round-trips perfectly and the real one
+// returned nothing at all, which is exactly the wrong way round.
+//
+// The reader still accepts Content-Length if it sees it. Not for clients —
+// there are none — but because a header is unambiguous, so accepting it costs a
+// branch and removes the chance of this being rediscovered the hard way by
+// anything that copied the old shape. Output is newline-delimited only, since
+// that is the side a client has to understand.
 let buffer = Buffer.alloc(0)
 
 process.stdin.on('data', (chunk) => {
   buffer = Buffer.concat([buffer, chunk])
   for (;;) {
-    const headEnd = buffer.indexOf('\r\n\r\n')
-    if (headEnd === -1) return
-    const head = buffer.subarray(0, headEnd).toString()
-    const match = /content-length:\s*(\d+)/i.exec(head)
-    if (!match) {
-      buffer = buffer.subarray(headEnd + 4)
+    const framed = takeFramed()
+    const payload = framed ?? takeLine()
+    if (payload === null) return
+    if (!payload.trim()) continue
+    let msg
+    try {
+      msg = JSON.parse(payload)
+    } catch (err) {
+      // A malformed line must not desynchronise the stream. Drop it and keep
+      // reading; the next newline is a known-good boundary.
+      process.stderr.write(`mcp-qi: bad JSON — ${err?.message}\n`)
       continue
     }
-    const length = Number(match[1])
-    const start = headEnd + 4
-    if (buffer.length < start + length) return
-    const payload = buffer.subarray(start, start + length).toString()
-    buffer = buffer.subarray(start + length)
-    handle(JSON.parse(payload)).catch((err) => {
+    handle(msg).catch((err) => {
       process.stderr.write(`mcp-qi: ${err?.stack || err}\n`)
     })
   }
 })
 
+/** A `Content-Length`-headed message, if the buffer starts with one. */
+function takeFramed() {
+  if (!/^content-length:/i.test(buffer.subarray(0, 15).toString())) return null
+  const headEnd = buffer.indexOf('\r\n\r\n')
+  if (headEnd === -1) return null
+  const match = /content-length:\s*(\d+)/i.exec(buffer.subarray(0, headEnd).toString())
+  if (!match) return null
+  const start = headEnd + 4
+  const length = Number(match[1])
+  if (buffer.length < start + length) return null
+  const payload = buffer.subarray(start, start + length).toString()
+  buffer = buffer.subarray(start + length)
+  return payload
+}
+
+/** One newline-delimited message — the transport MCP actually specifies. */
+function takeLine() {
+  const nl = buffer.indexOf(0x0a)
+  if (nl === -1) return null
+  const payload = buffer.subarray(0, nl).toString()
+  buffer = buffer.subarray(nl + 1)
+  return payload
+}
+
+function send(body) {
+  // `JSON.stringify` never emits a bare newline inside a string — it escapes
+  // them — so one line per message holds for any content the tools return.
+  process.stdout.write(`${JSON.stringify(body)}\n`)
+}
+
 function reply(id, result) {
-  const body = JSON.stringify({ jsonrpc: '2.0', id, result })
-  process.stdout.write(`Content-Length: ${Buffer.byteLength(body)}\r\n\r\n${body}`)
+  send({ jsonrpc: '2.0', id, result })
 }
 
 function fail(id, message) {
-  const body = JSON.stringify({ jsonrpc: '2.0', id, error: { code: -32000, message } })
-  process.stdout.write(`Content-Length: ${Buffer.byteLength(body)}\r\n\r\n${body}`)
+  send({ jsonrpc: '2.0', id, error: { code: -32000, message } })
 }
 
 async function handle(msg) {
