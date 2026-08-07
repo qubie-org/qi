@@ -66,7 +66,7 @@
  * that markdown does not emit, and returns 22% less text overall for no fewer
  * zeroes and one more crash.
  */
-import { spawn } from 'node:child_process'
+import { hookExit, supervise } from './supervise'
 import { existsSync } from 'node:fs'
 import { resolve } from 'node:path'
 import type { IncomingMessage, ServerResponse } from 'node:http'
@@ -203,7 +203,10 @@ export async function render(raw: string): Promise<RenderResult> {
   const url = check.url.toString()
 
   return new Promise<RenderResult>((resolve) => {
-    const child = spawn(
+    // Through the supervisor, not `spawn` directly. Four of these were found
+    // orphaned to PID 1 after nineteen hours, holding four cores, each long
+    // past a deadline that died with the process holding it. See supervise.ts.
+    const { child } = supervise(
       BINARY,
       [
         'fetch',
@@ -223,6 +226,7 @@ export async function render(raw: string): Promise<RenderResult> {
         // the honest thing is to respect the file that governs bots.
         '--obey-robots',
       ],
+      TIMEOUT_MS,
       { stdio: ['ignore', 'pipe', 'pipe'] },
     )
 
@@ -248,7 +252,7 @@ export async function render(raw: string): Promise<RenderResult> {
       child.kill('SIGKILL')
     }, TIMEOUT_MS)
 
-    child.stdout.on('data', (chunk: Buffer) => {
+    child.stdout?.on('data', (chunk: Buffer) => {
       if (capped) return
       out += chunk.toString()
       if (out.length > MAX_BYTES) {
@@ -256,7 +260,7 @@ export async function render(raw: string): Promise<RenderResult> {
         out = out.slice(0, MAX_BYTES)
       }
     })
-    child.stderr.on('data', (chunk: Buffer) => {
+    child.stderr?.on('data', (chunk: Buffer) => {
       // Bounded: a binary that decides to be chatty must not become the reason
       // the host runs out of memory.
       if (err.length < 4_000) err += chunk.toString()

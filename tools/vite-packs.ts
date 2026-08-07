@@ -27,6 +27,7 @@ import { dirname, extname, join, resolve } from 'node:path'
 import type { Plugin, ViteDevServer } from 'vite'
 import { handleNet } from './net'
 import { handleRender } from './render'
+import { hookExit, reapOrphans } from './supervise'
 
 /**
  * A file is a path, or {from, to} when the repo's own name would collide —
@@ -61,6 +62,12 @@ export function packsPlugin(root: string): Plugin {
   }
 
   const configure = (server: ViteDevServer) => {
+    // Children of a previous run that outlived it. This is the only thing that
+    // catches a parent killed outright, which is how four render processes ended
+    // up nineteen hours old and holding four cores.
+    hookExit()
+    void reapOrphans().then((n) => n && console.warn(`reaped ${n} orphaned process(es) from a previous run`))
+
     server.middlewares.use(async (req, res, next) => {
       const url = req.url ?? ''
 

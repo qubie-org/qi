@@ -126,6 +126,36 @@ const MAX_CANDIDATES = 5
 const TIMEOUT_MS = 4000
 
 let booting: Promise<Wasmer | null> | null = null
+let consecutiveFailures = 0
+
+/**
+ * How many failures in a row before the instance is assumed dead.
+ *
+ * One is a bad reducer or a bad payload and says nothing about the sandbox.
+ * Three in a row is the sandbox, and there is no other way to tell: a Wasmer
+ * instance that has stopped running commands does not announce it, it simply
+ * stops returning.
+ */
+const DEAD_AFTER = 3
+
+/**
+ * Throw the instance away so the next call builds a new one.
+ *
+ * The cache is why this is needed. `booting` is memoised, correctly — building
+ * the sandbox is expensive and should happen once — but a memoised handle to
+ * something dead is a memoised failure, and that is exactly what happened: the
+ * instance stopped running commands, every reducer began returning nothing, and
+ * every grounded source in the app went quiet for the rest of the session. The
+ * only symptom was emptiness, which is indistinguishable from the web having no
+ * answers, and it sent an hour into debugging an image feature that was fine.
+ *
+ * Nothing here can repair a wasm instance. What it can do is stop trusting one.
+ */
+export function retireSandbox(why: string): void {
+  console.warn(`sandbox: retiring instance — ${why}`)
+  booting = null
+  consecutiveFailures = 0
+}
 
 export function bootSandbox(): Promise<Wasmer | null> {
   booting ??= (async () => {
@@ -198,9 +228,18 @@ export async function reduce(reducerBody: string, payload: unknown): Promise<Fac
       console.warn(`reducer exited ${output.code}: ${output.stderr || '(no stderr)'}`)
       return null
     }
+    // A run that completed proves the instance is alive, whatever the
+    // reducer itself made of the payload.
+    consecutiveFailures = 0
     stdout = output.stdout
   } catch (err) {
     console.warn('reducer failed', err)
+    // A timeout is this sandbox's characteristic death: the command is
+    // accepted and never completes. Retire on the first one rather than
+    // waiting for three, because every call until then costs the full
+    // timeout and returns nothing.
+    if (String(err).includes('timeout')) retireSandbox('a reducer timed out')
+    else if (++consecutiveFailures >= DEAD_AFTER) retireSandbox(`${DEAD_AFTER} reducers failed in a row`)
     return null
   }
 
