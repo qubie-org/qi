@@ -24,6 +24,7 @@
 import type { Digest, Note } from './digest'
 import { CORE_VERBS, subject, type ToolContext } from './tools'
 import { ground, type Fact } from '../ground'
+import { pictureFor, wantsPicture } from '../ground/picture'
 import { granite, tighten, type Message } from '../model/granite'
 import { unsupportedSpans } from '../ground/judge'
 import { packs, type Verb } from '../model/packs'
@@ -135,6 +136,27 @@ export class Agent {
     on: (e: AgentEvent) => void,
   ): Promise<Outcome> {
     if (!this.ready) throw new Error('agent: the core model is not loaded')
+
+      // ── a picture is not a question ──────────────────────────────────────
+      //
+      // Answered before the model sees the turn, because all three attempts to
+      // route it *through* the model failed and each failed differently: it
+      // refused outright having called nothing, and when a fallback caught
+      // refusals it began emitting `/look?query=…` as literal prose instead.
+      // Both are the disposition that answered a two-city comparison backwards
+      // without looking — where a tool would answer, it prefers its memory, and
+      // its memory says it cannot show pictures.
+      //
+      // "Show me a photo of a humpback whale" has one reading. There is nothing
+      // here for a model to decide and three demonstrated ways for it to decide
+      // wrong. `pictureFor` still refuses when the best candidate is about
+      // something else, so this goes past the model, not past the checking.
+      if (wantsPicture(user)) {
+        const shown = await pictureFor(user).catch(() => null)
+        // The caption is the only sentence worth putting next to a photograph.
+        if (shown) return { reply: String(shown.fact.label ?? ''), facts: [shown.fact] }
+      }
+
 
     const store = ctx.store
     const verbs = this.verbs()

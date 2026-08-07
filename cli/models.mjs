@@ -17,11 +17,14 @@
  * being affordable and not.
  *
  * IBM ships the activated variants as safetensors only, so the GGUF conversions
- * are this project's own — 3b and 8b are done and published beside the app; 30b
- * is not, and until it is that size falls back to plain LoRA and a gate costing
- * seconds instead of milliseconds. That is a real difference in how the app
- * feels, so the setup says it out loud rather than letting someone discover it
- * as unexplained slowness.
+ * are this project's own, and both sizes offered here have them.
+ *
+ * 30b was listed and has been removed. Its adapters were never converted, so
+ * its gate would have cost seconds per source — but the deciding reason is that
+ * no file in its plan had a `sha256`, which made every one of its downloads
+ * unverifiable. A corrupt GGUF has already reached this project once and was
+ * benchmarked happily by a tool that did not check. Offering a size that cannot
+ * be verified is handing that failure to someone else.
  */
 
 /** Where this project publishes what it converted itself. */
@@ -65,18 +68,6 @@ export const MODELS = {
     },
     ram: '16 GB',
     note: 'Better answers, same activated gate.',
-  },
-  '30b': {
-    id: '30b',
-    title: 'Granite 4.1 30B',
-    repo: 'ibm-granite/granite-4.1-30b-GGUF',
-    file: 'granite-4.1-30b-Q4_K_M.gguf',
-    bytes: 17_490_000_000,
-    lora: 'granite4.1_30b',
-    alora: 'granite-4.1-30b',
-    activated: [],
-    ram: '32 GB',
-    note: 'Mixture-of-experts. Large on disk, fewer active parameters than it looks.',
   },
 }
 
