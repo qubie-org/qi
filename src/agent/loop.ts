@@ -108,36 +108,6 @@ export type AgentEvent =
 
 export type Outcome = { reply: string; facts: Fact[] }
 
-/**
- * Did the person ask to be shown something?
- *
- * Deliberately narrow and deliberately not a judgement. It matches the handful
- * of ways people actually ask for a picture, and misses anything oblique — a
- * false negative costs a picture nobody strictly demanded, while a false
- * positive attaches a photograph to a question that never wanted one, which is
- * far more jarring.
- */
-const PICTURE = /\b(show me|find me|get me)?\s*(a |an |some )?(photo|photograph|picture|image|pic)s?\b/i
-
-export const wantsPicture = (text: string): boolean =>
-  PICTURE.test(text) && !/\b(without|no)\s+(photo|picture|image)/i.test(text)
-
-/**
- * What the picture should be of.
- *
- * The leading "show me a photo of" is scaffolding, and Openverse searches
- * badly with it attached — "a photo of a humpback whale" returns far less than
- * "humpback whale". The source itself already narrows a long query word by
- * word; this only removes the part that is addressed to qi rather than to the
- * index.
- */
-export const pictureSubject = (text: string): string =>
-  text
-    .replace(/^\s*(please\s+)?(can you\s+|could you\s+)?(show|find|get)\s+(me\s+)?/i, '')
-    .replace(/^\s*(a |an |some )?(photo|photograph|picture|image|pic)s?\s+(of\s+)?/i, '')
-    .replace(/[?.!]+\s*$/, '')
-    .trim() || text
-
 export class Agent {
   private digest: Digest
 

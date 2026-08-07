@@ -300,6 +300,34 @@ export async function ground(text: string, router: Router): Promise<Fact | null>
 }
 
 /**
+ * Run one named source, skipping the router entirely.
+ *
+ * The router exists to decide *which* source answers a sentence, and that is
+ * the right question almost always. It is the wrong question when the sentence
+ * already says: "show me a photo of a humpback whale" has one reading, and
+ * routing it — or worse, asking a model to choose a tool for it — is a decision
+ * with nothing to decide and several ways to get wrong. See `picture.ts` for
+ * the three different ways it did.
+ */
+export async function fromSource(id: string, text: string): Promise<Fact | null> {
+  const source = SOURCES.find((s) => s.id === id)
+  if (!source) return null
+  const arg = source.arg ? source.arg(text) : text
+  let payload: unknown
+  try {
+    payload = await source.fetch(arg)
+  } catch (err) {
+    console.warn(`ground: ${id} fetch failed`, err)
+    return null
+  }
+  const fact = await reduce(source.reducer, payload)
+  // `rerank` is what turns four hits into the best one — it embeds the query and
+  // each candidate and takes the closest. Reimplementing that in the caller was
+  // the first thing tried here, and it was already written.
+  return fact ? await rerank(text, fact) : null
+}
+
+/**
  * The same work, with the route it took reported.
  *
  * The app only ever wants the fact. A test wants to know *how* it was obtained,
