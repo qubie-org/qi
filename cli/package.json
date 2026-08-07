@@ -1,0 +1,34 @@
+{
+  "name": "@qi-ui/cli",
+  "version": "0.1.0",
+  "description": "Set up and run qi — a local text river with Granite, research that cites its sources, and no account.",
+  "type": "module",
+  "bin": {
+    "qiui": "./qiui.mjs"
+  },
+  "files": [
+    "qiui.mjs",
+    "models.mjs",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "license": "AGPL-3.0-or-later",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/qubie-org/qi.git",
+    "directory": "cli"
+  },
+  "homepage": "https://github.com/qubie-org/qi",
+  "keywords": [
+    "granite",
+    "llama.cpp",
+    "local-first",
+    "research",
+    "rag"
+  ],
+  "publishConfig": {
+    "access": "public"
+  }
+}

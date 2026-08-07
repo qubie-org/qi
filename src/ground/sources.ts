@@ -32,7 +32,7 @@ const json = async (url: string, headers?: Record<string, string>) => {
  * earns a 429. They ask for an identifying User-Agent, which browsers refuse
  * to let scripts set, so their documented substitute is `Api-User-Agent`.
  */
-const WIKI_HEADERS = { 'Api-User-Agent': 'qi/0.1 (https://github.com/shinyobjectz/qi)' }
+const WIKI_HEADERS = { 'Api-User-Agent': 'qi/0.1 (https://github.com/qubie-org/qi)' }
 
 /**
  * needle's view of a source — deliberately ONE tool at a time.

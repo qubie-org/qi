@@ -26,3 +26,7 @@ native/Qi.app/
 # The MLX conversion, kept for comparison. 1.8 GB, reproducible in three
 # minutes with mlx_lm.convert, and slower than the GGUF it was measured against.
 packs/mlx/
+
+# Converted adapters, staged for a release rather than tracked. They are large,
+# and the release is where they live.
+packs/rag8b/

@@ -29,6 +29,8 @@
     <key>NSAllowsLocalNetworking</key>
     <true/>
   </dict>
+	<key>CFBundleIconFile</key>
+	<string>Qi</string>
 	<key>SUFeedURL</key>
 	<string>https://github.com/qubie-org/qi/releases/latest/download/appcast.xml</string>
 	<key>SUPublicEDKey</key>

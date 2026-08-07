@@ -24,6 +24,11 @@ mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources"
 cp "$binary" "$app/Contents/MacOS/qi"
 cp "$here/Info.plist" "$app/Contents/Info.plist"
 
+# The icon. `CFBundleIconFile` names it without the extension, and the file has
+# to be in Resources/ — a missing or misnamed one gets you the blank white page
+# placeholder, silently, with no build error to explain it.
+[ -f "$here/icon/Qi.icns" ] && cp "$here/icon/Qi.icns" "$app/Contents/Resources/Qi.icns"
+
 # ── the browser ─────────────────────────────────────────────────────────────
 # Lightpanda renders pages whose content only exists after their own JavaScript
 # has run. It is a helper *executable*, so it goes in Contents/MacOS rather than
@@ -166,19 +171,46 @@ fi
 # Inside-out, never --deep. A nested executable must carry its own signature
 # before the bundle is sealed around it; --deep produces something that
 # notarizes and then refuses to launch.
-echo "── sign (ad-hoc, inside-out)"
+# ── signing ─────────────────────────────────────────────────────────────────
+# Ad-hoc by default, because that is what a local build wants and it needs no
+# certificate. Set QI_SIGN_ID to a Developer ID and the same code path produces
+# something notarizable:
+#
+#   QI_SIGN_ID="Developer ID Application: Shane Murphy (BJJZ79J5NL)" native/build.sh
+#
+# Two flags come with it and both are mandatory for notarization. `--options
+# runtime` is the hardened runtime, without which Apple rejects the submission.
+# `--timestamp` is a secure timestamp from Apple's server — the ad-hoc path
+# passes `--timestamp=none`, which is correct there and fatal here, because a
+# signature with no timestamp cannot be verified once the certificate expires.
+sign_id="${QI_SIGN_ID:--}"
+if [ "$sign_id" = "-" ]; then
+  sign_flags=(--force --sign - --timestamp=none)
+  echo "── sign (ad-hoc, inside-out)"
+else
+  sign_flags=(--force --sign "$sign_id" --options runtime --timestamp)
+  echo "── sign ($sign_id, hardened runtime, inside-out)"
+fi
 # Every nested binary carries its own signature before the bundle is sealed
 # around it. Deepest first: a dylib signed after the app that contains it
 # invalidates the outer seal.
 for lib in "$app/Contents/Frameworks/"*.dylib; do
   [ -e "$lib" ] || continue
   [ -L "$lib" ] && continue
-  codesign --force --sign - --timestamp=none "$lib" >/dev/null 2>&1
+  codesign "${sign_flags[@]}" "$lib" >/dev/null 2>&1
 done
 for exe in lightpanda llama-server; do
-  [ -f "$app/Contents/MacOS/$exe" ] && codesign --force --sign - --timestamp=none "$app/Contents/MacOS/$exe" >/dev/null 2>&1
+  [ -f "$app/Contents/MacOS/$exe" ] && codesign "${sign_flags[@]}" "$app/Contents/MacOS/$exe" >/dev/null 2>&1
 done
-codesign --force --sign - --timestamp=none "$app" >/dev/null 2>&1
+# Sparkle ships its own nested helpers — XPC services and an autoupdate app —
+# and each is a bundle that must carry its own signature before the framework
+# is sealed, which is the same inside-out rule one level deeper.
+if [ -d "$app/Contents/Frameworks/Sparkle.framework" ]; then
+  find "$app/Contents/Frameworks/Sparkle.framework" \( -name "*.xpc" -o -name "*.app" \) -print0 2>/dev/null \
+    | while IFS= read -r -d "" nested; do codesign "${sign_flags[@]}" "$nested" >/dev/null 2>&1 || true; done
+  codesign "${sign_flags[@]}" "$app/Contents/Frameworks/Sparkle.framework" >/dev/null 2>&1 || true
+fi
+codesign "${sign_flags[@]}" "$app" >/dev/null 2>&1
 
 echo "── $(du -sh "$app" | cut -f1)  $app"
 
