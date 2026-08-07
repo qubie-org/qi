@@ -33,6 +33,8 @@
 import { granite } from '../model/granite'
 import { MODES } from './key'
 import { MOODS, moodFor, type Mood } from './dj'
+import { FIND_SOUND, runFindSound, said, type Sound } from './crate'
+import { PLACEMENT_SCHEMA, placements, type Placement } from './arrange'
 
 /**
  * What the model may say.
@@ -151,16 +153,88 @@ const EXAMPLES = MOODS.map(
 ).join('\n')
 
 /**
+ * Ask whether this set wants a real recording, and go and get it.
+ *
+ * One tool, offered alone. `sources.ts` records why — given nine tools a small
+ * model collapses to one choice for everything; given exactly one it extracts
+ * the argument correctly six times in eight — and the same measurement applies
+ * with more force here, because the argument *is* the whole contribution. The
+ * model is not choosing between verbs. It is deciding whether a description
+ * like "rain on a window at 3am" wants a rain recording under it, and if so,
+ * what to type into a search box.
+ *
+ * Returning nothing is a first-class outcome and the common one. Most sets are
+ * better entirely synthesised: they start instantly, they are always in key,
+ * and nothing in them has a licence. A found sample has to earn a ten-second
+ * download, and a model that reached for one every time would make `$dj` slower
+ * for no gain.
+ */
+async function findFor(description: string, bpm: number): Promise<Sound[]> {
+  try {
+    const { calls } = await granite.say(
+      [
+        {
+          role: 'system',
+          content: [
+            'You are arranging a short looping set of synthesised music.',
+            'The drums, bass and pad are already made and you do not choose them.',
+            '',
+            'If — and only if — the description names or implies a real recorded',
+            'sound the set should be built around, call find_sound for it: rain,',
+            'a train, a choir, a saxophone, a field recording, a vinyl crackle.',
+            'Search terms only, one to three words.',
+            '',
+            `The set runs at about ${Math.round(bpm)} bpm.`,
+            '',
+            'If the description is only a mood — "something calm", "darker",',
+            '"upbeat" — answer with the single word: no.',
+          ].join('\n'),
+        },
+        { role: 'user', content: description },
+      ],
+      { tools: [FIND_SOUND], maxTokens: 120 },
+    )
+    const call = calls.find((c) => c.name === 'find_sound')
+    if (!call) return []
+    let args: Record<string, unknown> = {}
+    try {
+      args = JSON.parse(call.args || '{}')
+    } catch {
+      // A tool call whose arguments did not parse is a tool call that was not
+      // made. Silently no sample, rather than a search for "undefined".
+      return []
+    }
+    const { sounds } = await runFindSound({ ...args, bpm: args.bpm ?? bpm })
+    return sounds
+  } catch (err) {
+    console.warn('dj: no sound search', err)
+    return []
+  }
+}
+
+/**
  * Compose a set for a description.
  *
  * Returns the nearest preset if the model is unreachable or says something
  * unusable, so this never fails — the worst outcome is the behaviour that
  * existed before it.
+ *
+ * Three passes, in this order, and the order is the point. The arrangement is
+ * decided first, so the tempo exists before anything is searched for and the
+ * search can be told what tempo to prefer. Then the search, which is the slow
+ * step and the only one that touches the network. Then placement, which is a
+ * separate fill because the model cannot place a recording it has not yet been
+ * told the tempo and length of — asking for all of it at once means asking it
+ * to place a sample it is simultaneously inventing.
  */
-export async function compose(description: string): Promise<{ mood: Mood; written: boolean }> {
+export async function compose(
+  description: string,
+): Promise<{ mood: Mood; written: boolean; placed: Placement[] }> {
   const near = moodFor(description)
-  if (!granite.ready || !description.trim()) return { mood: near, written: false }
+  if (!granite.ready || !description.trim()) return { mood: near, written: false, placed: [] }
 
+  let mood = near
+  let written = false
   try {
     const raw = await granite.fill<Record<string, unknown>>(
       [
@@ -171,9 +245,56 @@ export async function compose(description: string): Promise<{ mood: Mood; writte
       // Enough headroom to close the object; a truncated JSON is a total loss.
       { maxTokens: 420 },
     )
-    return { mood: shape(raw, near), written: true }
+    mood = shape(raw, near)
+    written = true
   } catch (err) {
     console.warn('dj: could not compose, using the nearest preset', err)
-    return { mood: near, written: false }
+  }
+
+  const sounds = await findFor(description, mood.cps * 60 * 4)
+  if (!sounds.length) return { mood, written, placed: [] }
+
+  try {
+    const raw = await granite.fill<unknown>(
+      [
+        {
+          role: 'system',
+          content: [
+            'You are placing found recordings into a looping set of music.',
+            '',
+            'For each recording you want to use, give its name, what job it does,',
+            'how often it comes round, and how far into the file to start.',
+            '',
+            'lead is the thing the set is about. bed sits under everything. stab is',
+            'a single hit. texture is barely audible air.',
+            '',
+            'every is how many bars between repeats: 1 is every bar, 8 is once a',
+            'phrase. begin is 0 to 0.9 — use it to skip a quiet start.',
+            '',
+            'Use one recording, or two at most. Leave the list empty if none of',
+            'them fit.',
+          ].join('\n'),
+        },
+        {
+          role: 'user',
+          content:
+            `The set: ${mood.id}, ${Math.round(mood.cps * 60 * 4)} bpm, ${mood.mode}.\n` +
+            `Wanted: ${description}\n\nRecordings found:\n${sounds.map(said).join('\n')}`,
+        },
+      ],
+      PLACEMENT_SCHEMA,
+      { maxTokens: 220 },
+    )
+    return { mood, written, placed: placements(raw, sounds) }
+  } catch (err) {
+    console.warn('dj: could not place the samples', err)
+    // A recording that was found and analysed but not placed is still better
+    // used than discarded: the first one goes in as a bed, which is the role
+    // that cannot be wrong — quiet, filtered, once every four bars.
+    return {
+      mood,
+      written,
+      placed: [{ sound: sounds[0].name, role: 'bed', every: 4, begin: 0 }],
+    }
   }
 }

@@ -31,6 +31,31 @@ declare module 'superdough' {
   export function registerWorklet(url: string): void
   export function initAudio(options?: Record<string, unknown>): Promise<void>
   export function getAudioContext(): AudioContext
+
+  /**
+   * The output graph superdough is really playing into.
+   *
+   * Declared for one reason: measuring. An analyser on the final gain reads the
+   * mix the speakers get, which is the only way to tell "the set is playing"
+   * apart from "the set thinks it is playing" — and those two diverged for most
+   * of a day.
+   *
+   * `output` is a wrapper, not a node, and this was first declared as
+   * `AudioNode` because that is what the name suggests. It type-checked and
+   * `output.connect` threw at runtime. That is this file's own warning landing
+   * on the person who wrote it: a narrow interface for a library you do not
+   * control checks against your idea of the library. The shape below was read
+   * off the running object.
+   *
+   * The controller has more on it (`duck`, `getOrbit`, `getBus`) and so does
+   * the output (`channelMerger`, `connectToDestination`); per the note above,
+   * what qi calls is what gets declared.
+   */
+  export function getSuperdoughAudioController(): {
+    audioContext: AudioContext
+    output: { destinationGain: GainNode; audioContext: AudioContext }
+    reset(): void
+  }
 }
 
 declare module '@strudel/webaudio' {

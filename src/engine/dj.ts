@@ -35,6 +35,8 @@ import { mini } from '@strudel/mini'
 import { webaudioOutput } from '@strudel/webaudio'
 import { degree, MODES, type Key } from './key'
 import { audioNow, currentKey, pinKey, unpinKey } from './sound'
+import { keepSet, rateFor, ROLES, strudelFile, type Layer, type Placement } from './arrange'
+import { emptyCrate, inCrate, soundNamed, type Sound } from './crate'
 
 /**
  * Register mini-notation as the parser for bare strings.
@@ -201,6 +203,8 @@ type Playing = {
   mood: Mood
   key: Key
   scheduler: { start(): void; stop(): void; setPattern(p: unknown, autostart?: boolean): void }
+  /** The generated Strudel source for whatever is currently playing. */
+  source: string
 }
 
 let playing: Playing | null = null
@@ -209,7 +213,139 @@ export const nowPlaying = (): { mood: string; key: string } | null =>
   playing ? { mood: playing.mood.id, key: `${playing.key.mode.name} on ${playing.key.root}` } : null
 
 /**
- * Build the pattern.
+ * The set as text, or nothing.
+ *
+ * Exposed because a set that uses found recordings has to be able to show its
+ * own credits, and the file is where they live. See `arrange.ts` for why the
+ * text exists at all and why nothing ever evaluates it.
+ */
+export const setSource = (): string => playing?.source ?? ''
+
+/** `s("x").gain(1).room(2)` — the text half of a layer, built beside the pattern. */
+const call = (base: string, calls: [string, string | number][]): string =>
+  base + calls.map(([m, v]) => `.${m}(${v})`).join('')
+
+/**
+ * One found recording, placed.
+ *
+ * `every` is expressed as a mask rather than as `.every()`, because Strudel's
+ * `every` applies a *function* every N cycles and what is wanted here is for
+ * the sample to sound on one cycle in N and be silent on the others. The mask
+ * is written out longhand — `<1 0 0 0>` — so the generated file says plainly
+ * what it does instead of relying on the reader knowing which of the two it is.
+ */
+function sampleLayer(p: Placement, sound: Sound, mood: Mood, key: Key): Layer {
+  const role = ROLES[p.role]
+  const { speed } = rateFor(sound, mood, key)
+
+  const mask = p.every <= 1 ? '' : `<1${' 0'.repeat(p.every - 1)}>`
+  const calls: [string, string | number][] = []
+  if (p.begin > 0) calls.push(['begin', p.begin.toFixed(3)])
+  if (speed !== 1) calls.push(['speed', speed])
+  calls.push(['gain', role.gain])
+  if (role.cutoff) calls.push(['cutoff', role.cutoff])
+  if (role.room) calls.push(['room', role.room])
+  if (mask) calls.push(['mask', `"${mask}"`])
+
+  let pattern = s(p.sound) as any
+  if (p.begin > 0) pattern = pattern.begin(p.begin)
+  if (speed !== 1) pattern = pattern.speed(speed)
+  pattern = pattern.gain(role.gain)
+  if (role.cutoff) pattern = pattern.cutoff(role.cutoff)
+  if (role.room) pattern = pattern.room(role.room)
+  if (mask) pattern = pattern.mask(mask)
+
+  return { pattern, source: call(`s("${p.sound}")`, calls) }
+}
+
+/**
+ * The synthesised half, as patterns and as text.
+ *
+ * The drum voices depend on whether the sample bank loaded, which is why
+ * `voices` is a parameter rather than being read from `kitReady` inside: the
+ * generated source has to say `sbd` when `sbd` is what played, or the file is a
+ * faithful description of a set nobody heard.
+ */
+function coreLayers(
+  mood: Mood,
+  key: Key,
+  voices: { kick: string; snare: string; hat: string },
+  real: boolean,
+): Layer[] {
+  const notes = (degrees: number[], octave: number) =>
+    degrees.map((d) => degree(key, d) + octave * 12).join(' ')
+
+  const out: Layer[] = []
+  const rhythm = (pattern: string, voice: string) => pattern.replace(/x/g, voice)
+
+  if (mood.kick !== '~') {
+    const src = rhythm(mood.kick, voices.kick)
+    out.push({
+      pattern: (s(src) as any).gain(real ? 0.5 : 0.34).decay(0.16),
+      source: `s("${src}").gain(${real ? 0.5 : 0.34}).decay(0.16)`,
+    })
+  }
+  if (mood.snare !== '~') {
+    const src = rhythm(mood.snare, voices.snare)
+    out.push(
+      real
+        ? { pattern: (s(src) as any).gain(0.34), source: `s("${src}").gain(0.34)` }
+        : {
+            pattern: (s(src) as any).bandf(1800).bandq(2.2).decay(0.11).gain(0.16),
+            source: `s("${src}").bandf(1800).bandq(2.2).decay(0.11).gain(0.16)`,
+          },
+    )
+  }
+  if (mood.hat !== '~') {
+    const src = rhythm(mood.hat, voices.hat)
+    out.push(
+      real
+        ? { pattern: (s(src) as any).gain(0.18).mask('<1 1 0 1>'), source: `s("${src}").gain(0.18).mask("<1 1 0 1>")` }
+        : {
+            pattern: (s(src) as any).hcutoff(7000).decay(0.028).gain(0.075).mask('<1 1 0 1>'),
+            source: `s("${src}").hcutoff(7000).decay(0.028).gain(0.075).mask("<1 1 0 1>")`,
+          },
+    )
+  }
+
+  const bass = notes(mood.bass, -1)
+  out.push({
+    pattern: (note(bass) as any)
+      .s('sawtooth')
+      .cutoff(mood.cutoff * 0.5)
+      .gain(0.16)
+      .attack(0.01)
+      .release(0.18),
+    source: `note("${bass}").s("sawtooth").cutoff(${mood.cutoff * 0.5}).gain(0.16).attack(0.01).release(0.18)`,
+  })
+
+  const pad = notes(mood.pad, 0)
+  const lo = Math.round(mood.cutoff * 0.55)
+  const hi = Math.round(mood.cutoff * 1.35)
+  out.push({
+    pattern: (note(pad) as any)
+      .s('triangle')
+      .slow(4)
+      .gain(0.075)
+      .attack(1.2)
+      .release(2.5)
+      .room(0.6)
+      .cutoff(sine.range(lo, hi).slow(32)),
+    source:
+      `note("${pad}").s("triangle").slow(4).gain(0.075).attack(1.2).release(2.5).room(0.6)` +
+      `\n    .cutoff(sine.range(${lo}, ${hi}).slow(32))`,
+  })
+
+  return out
+}
+
+/** Stack whatever layers exist. `silence` rather than an empty stack, which throws. */
+const stackOf = (layers: Layer[]): unknown =>
+  layers.length ? stack(...layers.map((l) => l.pattern)) : silence
+
+
+/**
+ * Build the pattern, and the text that describes it.
  *
  * Notes are MIDI numbers, not names and not frequencies.
  *
@@ -224,12 +360,15 @@ export const nowPlaying = (): { mood: string; key: string } | null =>
  * MIDI is also the honest unit here: `degree()` already returns one, so this
  * passes it straight through instead of converting to hertz for Strudel to
  * convert back.
+ *
+ * The layer construction itself moved to `arrange.ts`. Not for tidiness: every
+ * layer now has to exist twice — once as a pattern that plays and once as a
+ * line of Strudel in the generated file — and two writers in two files is how
+ * the file ends up describing a set nobody is listening to. Each layer is built
+ * as a pair, in one place, and this function only stacks them.
  */
-function build(mood: Mood, key: Key) {
+function build(mood: Mood, key: Key, placed: Placement[]): { pattern: unknown; source: string } {
   ensureParser()
-
-  const notes = (degrees: number[], octave: number) =>
-    degrees.map((d) => degree(key, d) + octave * 12).join(' ')
 
   // The same rhythms, played by whatever voices exist.
   //
@@ -240,28 +379,6 @@ function build(mood: Mood, key: Key) {
   const voices = kitReady
     ? { kick: 'bd', snare: 'sd', hat: 'hh' }
     : { kick: 'sbd', snare: 'white', hat: 'white' }
-
-  const layer = (rhythm: string, voice: string) =>
-    rhythm === '~' ? null : s(rhythm.replace(/x/g, voice))
-
-  const kick = layer(mood.kick, voices.kick)?.gain(kitReady ? 0.5 : 0.34).decay(0.16) ?? silence
-
-  // The filters only apply to the noise version. A recorded snare already has
-  // its own body, and putting a 1.8 kHz band across it makes it sound like it
-  // is being played through a telephone.
-  const snareRaw = layer(mood.snare, voices.snare)
-  const snare = snareRaw
-    ? kitReady
-      ? snareRaw.gain(0.34)
-      : snareRaw.bandf(1800).bandq(2.2).decay(0.11).gain(0.16)
-    : silence
-
-  const hatRaw = layer(mood.hat, voices.hat)
-  const hat = hatRaw
-    ? kitReady
-      ? hatRaw.gain(0.18)
-      : hatRaw.hcutoff(7000).decay(0.028).gain(0.075)
-    : silence
 
   /**
    * Arrangement, which is where "sounds better" actually comes from.
@@ -281,44 +398,21 @@ function build(mood: Mood, key: Key) {
    * The periods are deliberately coprime-ish — 4, 8, 24, 32 cycles — so the
    * layers drift in and out of alignment instead of all changing on the same
    * bar, which is what makes a loop sound like an arrangement rather than like
-   * a switch being flipped.
+   * a switch being flipped. A found sample joins that scheme through its own
+   * `every`, which is the one arrangement decision the model does get to make.
    */
-  const arranged = stack(
-    // A kick that occasionally drops half its hits. Once every eight cycles,
-    // which is often enough to notice and rare enough not to be a pattern.
-    kick.every(8, (x: unknown) => (x as { degradeBy: (n: number) => unknown }).degradeBy(0.5)),
-    snare,
-    // Hats sit out one phrase in four. The single cheapest way to make a loop
-    // breathe: taking a layer away is more audible than adding one.
-    hat.mask('<1 1 0 1>'),
-  )
+  const layers: Layer[] = [...coreLayers(mood, key, voices, kitReady)]
+  const sounds = []
+  for (const p of placed) {
+    // A placement naming a sound that is not in the crate is dropped rather
+    // than repaired. There is no nearest sensible recording.
+    const sound = soundNamed(p.sound)
+    if (!sound) continue
+    sounds.push(sound)
+    layers.push(sampleLayer(p, sound, mood, key))
+  }
 
-  const drums = arranged
-
-  const bass = note(notes(mood.bass, -1))
-    .s('sawtooth')
-    .cutoff(mood.cutoff * 0.5)
-    .gain(0.16)
-    .attack(0.01)
-    .release(0.18)
-
-  // The pad holds a chord across the whole cycle and is the layer the interface
-  // sounds sit inside — quiet, slow, and wide open in time.
-  const pad = note(notes(mood.pad, 0))
-    .s('triangle')
-    .slow(4)
-    .cutoff(mood.cutoff)
-    .gain(0.075)
-    .attack(1.2)
-    .release(2.5)
-    .room(0.6)
-
-  // The filter opens and closes over half a minute. Slow enough that you never
-  // catch it moving, fast enough that the set is somewhere different by the
-  // time you look up.
-  const swept = pad.cutoff(sine.range(mood.cutoff * 0.55, mood.cutoff * 1.35).slow(32))
-
-  return stack(drums, bass, swept)
+  return { pattern: stackOf(layers), source: strudelFile(mood, key, layers, sounds) }
 }
 
 /**
@@ -339,7 +433,10 @@ export function keyForMood(mood: Mood): Key {
  * Start a set. Idempotent in effect: starting while playing replaces the set
  * rather than layering a second one over the first.
  */
-export async function startSet(mood: Mood): Promise<{ mood: string; key: string }> {
+export async function startSet(
+  mood: Mood,
+  placed: Placement[] = [],
+): Promise<{ mood: string; key: string; source: string; page: string }> {
   await initAudio()
   ensureParser()
 
@@ -348,7 +445,10 @@ export async function startSet(mood: Mood): Promise<{ mood: string; key: string 
   // fails fast and the synth kit plays.
   await loadKit()
 
-  if (playing) stopSet()
+  // `halt`, not `stopSet`: stopping empties the crate, and the crate is what
+  // the caller has just spent ten seconds filling. Replacing a set must not
+  // throw away the recordings the replacement is made of.
+  if (playing) halt()
 
   // The tonic stays where the conversation had it and only the mode changes, so
   // starting a set does not transpose the room out from under whatever was just
@@ -362,20 +462,37 @@ export async function startSet(mood: Mood): Promise<{ mood: string; key: string 
     // reason: given the raw clock this scheduler logged hundreds of "skip
     // query: too late" while trying to keep a bar in phase against a value
     // that stalls and lurches.
+    //
+    // That message will come back, in bursts, and the second time it is not
+    // this. Strudel's clock advances `phase` by 0.05s per callback and drives
+    // the callback from a 100ms `setInterval`; macOS throttles timers in a
+    // window that is not frontmost, so an occluded window wakes up owing
+    // twenty ticks per second it was away and skips every one of them as
+    // already past. Measured: frontmost, peak RMS 0.1999 and no skips at all;
+    // occluded, 0.010 — silence — and a flood of them sharing one timestamp,
+    // which is the tell. Nothing here is wrong when that happens, and there is
+    // nothing to fix in the clock. Verify audio with the window in front.
     getTime: () => audioNow(ctx),
   })
 
-  scheduler.setPattern(build(mood, key).cps(mood.cps), true)
-  playing = { mood, key, scheduler }
+  const { pattern, source } = build(mood, key, placed)
+  scheduler.setPattern((pattern as { cps: (n: number) => unknown }).cps(mood.cps), true)
+  playing = { mood, key, scheduler, source }
 
   // Everything the interface plays from here re-tunes to the set.
   pinKey(key)
 
-  return { mood: mood.id, key: `${key.mode.name} on ${key.root}` }
+  // The file is written whether or not anybody asks for it. A set with found
+  // recordings in it has credits that have to survive the set, and writing them
+  // down only when requested means they are missing exactly when somebody
+  // wanted them.
+  const page = keepSet(mood, source, inCrate())
+
+  return { mood: mood.id, key: `${key.mode.name} on ${key.root}`, source, page }
 }
 
-/** Stop, and hand the key back to the conversation. */
-export function stopSet(): void {
+/** Silence the scheduler and give the key back. Keeps the crate. */
+function halt(): void {
   if (!playing) return
   try {
     playing.scheduler.stop()
@@ -384,6 +501,15 @@ export function stopSet(): void {
   }
   playing = null
   unpinKey()
+}
+
+/** Stop, and hand the key back to the conversation. */
+export function stopSet(): void {
+  halt()
+  // The crate goes with the set. Object URLs held past the set that used them
+  // are a few megabytes of decoded audio nobody can reach, and the next set
+  // will want different sounds anyway.
+  emptyCrate()
 }
 
 export const isPlaying = (): boolean => playing !== null
