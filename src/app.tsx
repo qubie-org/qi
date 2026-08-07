@@ -549,14 +549,14 @@ export default function App() {
         <i className="lamp lamp--3" />
         <i className="lamp lamp--4" />
       </div>
-      <div className="chrome">
-        {/* A new conversation, and the ones before it.
-            Beside the status rather than in a sidebar: the app has one column
-            and adding a second to hold a list would cost more than the list is
-            worth. The drawer opens over the river and closes on choosing. */}
+      {/* Threads, on the other side.
+          One control rather than two loose glyphs, and at the opposite corner
+          from the status — the badges on the right need that room, and two
+          unrelated jobs sharing a corner made both look like decoration. */}
+      <div className="keys">
         <button
           type="button"
-          className="chrome-act"
+          className="key"
           title="new thread"
           aria-label="new thread"
           onClick={() => {
@@ -566,26 +566,30 @@ export default function App() {
             setHistory(null)
           }}
         >
-          +
+          <svg width="13" height="13" viewBox="0 0 13 13" aria-hidden>
+            <path d="M6.5 2v9M2 6.5h9" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+          </svg>
         </button>
         <button
           type="button"
-          className="chrome-act"
+          className={`key${history ? ' key--on' : ''}`}
           title="past threads"
           aria-label="past threads"
+          aria-expanded={!!history}
           onClick={() => {
             sound(history ? 'unmode' : 'mode')
-            // Only open once there is a store to ask. Before that the list
-            // came back empty and the drawer said "nothing yet", which is a
-            // claim about your history made without reading it.
             if (history) return setHistory(null)
             const store = engine.current?.store
             if (store) setHistory(store.threads())
           }}
         >
-          ⏱
+          <svg width="13" height="13" viewBox="0 0 13 13" aria-hidden>
+            <path d="M1.6 3.2h9.8M1.6 6.5h9.8M1.6 9.8h6.2" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+          </svg>
         </button>
+      </div>
 
+      <div className="chrome">
         {/* Anything still running. A command that keeps going after it returns
             has to be stoppable from outside the sentence that started it —
             otherwise the only way to end it is to remember the exact words,

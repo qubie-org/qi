@@ -1628,68 +1628,6 @@ body {
   color: var(--ink-hint);
 }
 
-/* ── threads ─────────────────────────────────────────────────────────────────
-   Two marks beside the status, not a sidebar. The app is one column and adding
-   a second to hold a list of conversations would cost more room than the list
-   is worth — so the history opens over the river and closes as soon as it is
-   used. */
-.chrome-act {
-  appearance: none;
-  border: 0;
-  background: none;
-  padding: 0 .28rem;
-  font: inherit;
-  font-size: .82rem;
-  line-height: 1;
-  color: var(--ink-hint);
-  cursor: pointer;
-  transition: color 140ms ease;
-}
-.chrome-act:hover { color: var(--ink) }
-
-.threads {
-  position: absolute;
-  top: 2.2rem;
-  right: 0;
-  z-index: 20;
-  min-width: 17rem;
-  max-height: 60vh;
-  overflow-y: auto;
-  display: flex;
-  flex-direction: column;
-  padding: .25rem;
-  background: var(--paper);
-  border: 1px solid var(--rule);
-  border-radius: .6em;
-  box-shadow:
-    0 1px 2px color-mix(in oklch, var(--ink) 5%, transparent),
-    0 8px 24px -12px color-mix(in oklch, var(--ink) 18%, transparent);
-}
-.threads-row {
-  display: flex;
-  align-items: baseline;
-  gap: .6rem;
-  width: 100%;
-  padding: .34em .5em;
-  border: 0;
-  border-radius: .4em;
-  background: none;
-  font: inherit;
-  text-align: left;
-  cursor: pointer;
-}
-.threads-row:hover { background: color-mix(in oklch, var(--ink) 6%, transparent) }
-.threads-title {
-  flex: 1 1 auto;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: .86rem;
-  color: var(--ink);
-}
-.threads-meta { flex: 0 0 auto; font-size: .72rem; color: var(--ink-hint) }
-.threads-empty { padding: .5rem; font-size: .8rem; font-style: italic; color: var(--ink-hint) }
 
 /* ── the thread, centred ─────────────────────────────────────────────────────
    The river was flush left at every width, which on a wide window left two
@@ -1717,3 +1655,89 @@ body {
 .composer { align-items: center }
 .composer-field { margin-inline: auto; max-width: 46ch }
 .picker { margin-inline: auto; max-width: 46ch }
+
+/* ── threads, as one key ─────────────────────────────────────────────────────
+   Two loose glyphs beside the status read as decoration and crowded the badges
+   that actually belong in that corner. One control, divided, at the opposite
+   side: a keycap, because it is a thing you press rather than a thing you read.
+   The divider is a border on the second key, so the pair reads as one object
+   with two halves instead of two objects that happen to touch. */
+.keys {
+  position: fixed;
+  top: clamp(1rem, 3vw, 2rem);
+  left: clamp(1.5rem, 5vw, 5rem);
+  z-index: 4;
+  display: inline-flex;
+  align-items: stretch;
+  background: var(--paper);
+  border: 1px solid var(--rule);
+  border-radius: .5em;
+  box-shadow: 0 1px 0 color-mix(in oklch, var(--ink) 8%, transparent);
+  overflow: hidden;
+}
+.key {
+  appearance: none;
+  border: 0;
+  background: none;
+  padding: .34rem .5rem;
+  display: grid;
+  place-items: center;
+  color: var(--ink-hint);
+  cursor: pointer;
+  transition: background 120ms ease, color 120ms ease;
+}
+.key + .key { border-left: 1px solid var(--rule) }
+.key:hover { background: color-mix(in oklch, var(--ink) 5%, transparent); color: var(--ink) }
+.key--on { background: color-mix(in oklch, var(--ink) 8%, transparent); color: var(--ink) }
+
+/* A real overlay, fixed to the viewport and anchored under the key that opened
+   it. It was absolutely positioned inside the stage, which put it in the
+   scrolling column and let the layout move underneath it. */
+.threads {
+  position: fixed;
+  top: calc(clamp(1rem, 3vw, 2rem) + 2.1rem);
+  left: clamp(1.5rem, 5vw, 5rem);
+  z-index: 5;
+  min-width: 19rem;
+  max-width: min(26rem, 80vw);
+  max-height: min(60vh, 30rem);
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  padding: .25rem;
+  background: var(--paper);
+  border: 1px solid var(--rule);
+  border-radius: .6em;
+  box-shadow:
+    0 1px 2px color-mix(in oklch, var(--ink) 6%, transparent),
+    0 12px 32px -14px color-mix(in oklch, var(--ink) 26%, transparent);
+}
+.threads-row {
+  display: flex; align-items: baseline; gap: .6rem; width: 100%;
+  padding: .38em .55em; border: 0; border-radius: .4em; background: none;
+  font: inherit; text-align: left; cursor: pointer;
+}
+.threads-row:hover { background: color-mix(in oklch, var(--ink) 6%, transparent) }
+.threads-title {
+  flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis;
+  white-space: nowrap; font-size: .86rem; color: var(--ink);
+}
+.threads-meta { flex: 0 0 auto; font-size: .72rem; color: var(--ink-hint) }
+.threads-empty { padding: .55rem; font-size: .8rem; font-style: italic; color: var(--ink-hint) }
+
+/* ── the measure, with room ──────────────────────────────────────────────────
+   30ch was chosen when the column was flush left and the empty right-hand side
+   did the framing. Centred, the same measure reads as a narrow ribbon down the
+   middle of a wide window — the white space stopped being a margin and became
+   a surround. So the column widens; display type still wants a short line, but
+   short relative to the page rather than to a phone. */
+.river { max-width: 46ch }
+.turn { max-width: 46ch }
+/* The same measure as the river, and the same padding under it.
+   Matching `max-width` was not enough: the stage insets its column with
+   `clamp(1.5rem, 5vw, 5rem)` and the composer used a narrower inset of its own,
+   so two boxes of identical width still centred 29px apart. A centred element
+   inherits its parent's padding into where its centre lands, which is easy to
+   forget precisely because the widths look equal. */
+.composer-field, .picker { max-width: 46ch }
+.composer { padding-inline: clamp(1.5rem, 5vw, 5rem) }
