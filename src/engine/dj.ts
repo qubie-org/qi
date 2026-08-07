@@ -30,6 +30,9 @@
  * Tuesday.
  */
 import { getAudioContext, initAudio, samples } from '@strudel/webaudio'
+import * as strudelCore from '@strudel/core'
+import * as strudelAudio from '@strudel/webaudio'
+import { soundMap } from 'superdough'
 import { note, repl, s, sine, silence, stack, setStringParser } from '@strudel/core'
 import { mini } from '@strudel/mini'
 import { webaudioOutput } from '@strudel/webaudio'
@@ -37,6 +40,8 @@ import { degree, MODES, type Key } from './key'
 import { audioNow, currentKey, pinKey, unpinKey } from './sound'
 import { keepSet, rateFor, ROLES, strudelFile, type Layer, type Placement } from './arrange'
 import { emptyCrate, inCrate, soundNamed, type Sound } from './crate'
+import { untilPlayable, vocabulary, type Attempt } from './verify'
+import type { Write } from '../packs/strudel'
 
 /**
  * Register mini-notation as the parser for bare strings.
@@ -433,10 +438,45 @@ export function keyForMood(mood: Mood): Key {
  * Start a set. Idempotent in effect: starting while playing replaces the set
  * rather than layering a second one over the first.
  */
+/**
+ * What to ask the model for.
+ *
+ * The mood carries what the words were understood to mean — tempo, mode, and
+ * the words that reached it — and the crate carries what was found to play. A
+ * model asked only for "deep" writes the median deep set; told the tempo and
+ * that there are two found recordings in the room, it writes something that
+ * fits them.
+ */
+function describeFor(mood: Mood, placed: Placement[]): string {
+  const bpm = Math.round(mood.cps * 120)
+  const found = placed.length
+    ? `, using ${placed.length} sampled recording${placed.length === 1 ? '' : 's'}`
+    : ''
+  return `a ${mood.id} set in ${mood.mode} at ${bpm} bpm${found}`
+}
+
+/**
+ * What a generated pattern may name, and what will actually make a sound.
+ *
+ * Both are read at the moment of use rather than cached. Strudel registers its
+ * synths eagerly but a sample bank only once its download lands, so the same
+ * pattern is playable or silent depending on when the question is asked —
+ * measured, the registry holds 19 names before `loadKit` and 237 after. A
+ * check against the early number rejects every drum the model writes.
+ */
+const strudelVocabulary = () =>
+  vocabulary(
+    strudelCore as unknown as Record<string, unknown>,
+    strudelAudio as unknown as Record<string, unknown>,
+  )
+
+const registeredSounds = () => new Set(Object.keys(soundMap.get()))
+
 export async function startSet(
   mood: Mood,
   placed: Placement[] = [],
-): Promise<{ mood: string; key: string; source: string; page: string }> {
+  write?: Write,
+): Promise<{ mood: string; key: string; source: string; page: string; wrote: Attempt | null }> {
   await initAudio()
   ensureParser()
 
@@ -475,7 +515,47 @@ export async function startSet(
     getTime: () => audioNow(ctx),
   })
 
-  const { pattern, source } = build(mood, key, placed)
+  /**
+   * Ask the model for a pattern, and fall back to arranging one.
+   *
+   * After `loadKit`, deliberately: the check reads the sound registry, and
+   * before the kit lands that registry has no drums in it, so every pattern the
+   * model writes would be rejected for naming `bd`.
+   *
+   * A failure here is not an error. `build` cannot produce anything unplayable,
+   * because a struct under a grammar cannot express anything unplayable — so
+   * the set always starts, and `wrote` is what says whether it was composed or
+   * arranged. That is the honest version of this feature: the interesting path
+   * is allowed to fail as often as it likes.
+   */
+  let wrote: Attempt | null = null
+  let pattern: unknown
+  let source: string
+
+  if (write) {
+    wrote = await untilPlayable(
+      (seed) => write(describeFor(mood, placed), seed),
+      strudelVocabulary(),
+      registeredSounds(),
+      // Two, not four. A generation costs about 37 seconds on the wasm backend,
+      // and nobody waits two and a half minutes for a backing track. `repair`
+      // is what makes two enough — it rescues the common failure rather than
+      // spending another 37 seconds regenerating four good layers to fix one
+      // invented word.
+      2,
+    )
+    if (!wrote.ok) console.warn('dj: nothing playable in', wrote.tries, 'tries —', wrote.reasons.join(' · '))
+  }
+
+  if (wrote?.ok) {
+    pattern = wrote.pattern
+    source = wrote.code
+  } else {
+    const built = build(mood, key, placed)
+    pattern = built.pattern
+    source = built.source
+  }
+
   scheduler.setPattern((pattern as { cps: (n: number) => unknown }).cps(mood.cps), true)
   playing = { mood, key, scheduler, source }
 
@@ -488,7 +568,7 @@ export async function startSet(
   // wanted them.
   const page = keepSet(mood, source, inCrate())
 
-  return { mood: mood.id, key: `${key.mode.name} on ${key.root}`, source, page }
+  return { mood: mood.id, key: `${key.mode.name} on ${key.root}`, source, page, wrote }
 }
 
 /** Silence the scheduler and give the key back. Keeps the crate. */

@@ -13,7 +13,10 @@
  */
 import type { Fact } from '../../ground/sandbox'
 import { haveSamples, isPlaying, nowPlaying, setSource, startSet, stopSet } from '../../engine/dj'
+import type { Attempt } from '../../engine/verify'
 import { compose } from '../../engine/compose'
+import { packs } from '../../model/packs'
+import type { Write } from '../../packs/strudel'
 import { credits, inCrate } from '../../engine/crate'
 import { address } from '../../pages/space'
 
@@ -37,7 +40,12 @@ export async function run(argument: string): Promise<Fact | null> {
     // examples it is shown. Everything it can say is playable by construction —
     // see engine/compose.ts for why it fills a struct rather than writing code.
     const { mood, written, placed } = await compose(said)
-    const { key, page } = await startSet(mood, placed)
+
+    // The strudel pack writes the pattern; without it the struct arranges one.
+    // Asking by capability rather than by import is what keeps this a quieter
+    // feature when the pack is not installed instead of a broken one.
+    const write = packs.provide<Write>('strudel')
+    const { key, page, wrote } = await startSet(mood, placed, write)
     const kit = haveSamples() ? '' : ' (synth kit)'
 
     /**
@@ -59,12 +67,30 @@ export async function run(argument: string): Promise<Fact | null> {
       srcUrl: found.length ? address(page) : undefined,
       hint: found.length
         ? `${mood.id} set with ${found.length === 1 ? 'a sample' : `${found.length} samples`} by ${who}`
-        : `${written ? 'arranged' : 'a preset'} ${mood.id} set is playing${kit}`,
+        : `${how(wrote, written)} ${mood.id} set is playing${kit}`,
     }
   } catch (err) {
     console.warn('dj: could not start', err)
     return null
   }
+}
+
+/**
+ * How the set came to exist, in one word.
+ *
+ * Worth saying out loud rather than hiding, because the three are genuinely
+ * different things to be listening to. `composed` is a pattern the strudel pack
+ * wrote and that passed every check. `arranged` is the struct in compose.ts,
+ * filled by the core model. `a preset` is neither — the words were read and one
+ * of four moods was matched.
+ *
+ * A retry is mentioned when it happened. Needing three attempts is not a
+ * failure, it is the cost of letting the model write freely, and a hint that
+ * never admits it makes the feature look more reliable than it is.
+ */
+function how(wrote: Attempt | null, written: boolean): string {
+  if (wrote?.ok) return wrote.tries > 1 ? `a composed (${wrote.tries} tries)` : 'a composed'
+  return written ? 'an arranged' : 'a preset'
 }
 
 /**

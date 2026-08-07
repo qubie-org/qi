@@ -99,6 +99,7 @@ const LOADERS: Record<string, () => Promise<{ default: PackModule }>> = {
   embed: () => import('../packs/embed'),
   see: () => import('../packs/see'),
   rag: () => import('../packs/rag'),
+  strudel: () => import('../packs/strudel'),
 }
 
 class Registry {

@@ -24,7 +24,7 @@
       "mirrors": [
         {
           "repo": "lmstudio-community/granite-4.0-h-tiny-GGUF",
-          "why": "A plain llama.cpp conversion of the same official weights. Not byte-identical to IBM's own GGUF — a different converter version writes different metadata — so it carries its own hash rather than sharing one.",
+          "why": "A plain llama.cpp conversion of the same official weights. Not byte-identical to IBM's own GGUF \u2014 a different converter version writes different metadata \u2014 so it carries its own hash rather than sharing one.",
           "sha256": {
             "granite-4.0-h-tiny-Q4_K_M.gguf": "064bea0136420b38d0b65697fa5e772e28b112eee1757aacc7f64eba6bf37810"
           }
@@ -57,7 +57,7 @@
     {
       "id": "see",
       "title": "eyes",
-      "what": "Reads images: charts to CSV, tables to HTML, key-value pairs out of scanned documents. Built on the dense Granite 4.1 tower rather than the core's hybrid one, so it is genuinely a second model — but it speaks the same chat template and tokenizer, and it sleeps when idle.",
+      "what": "Reads images: charts to CSV, tables to HTML, key-value pairs out of scanned documents. Built on the dense Granite 4.1 tower rather than the core's hybrid one, so it is genuinely a second model \u2014 but it speaks the same chat template and tokenizer, and it sleeps when idle.",
       "repo": "ibm-granite/granite-vision-4.1-4b-GGUF",
       "files": [
         "granite-vision-4.1-4b-Q4_K_M.gguf",
@@ -147,7 +147,7 @@
     {
       "id": "rag",
       "title": "citations",
-      "what": "Five LoRA adapters, not a model: answerability, citations, hallucination detection, query clarification, query rewrite. They load onto the core's weights and are selected per request, so the whole shelf costs 400 MB rather than five models.  Required: the answerability adapter gates every source the research process reads, and without it the gate fails open and the notes fill with pages that merely mention the subject. Three of the five are activated variants produced by a local conversion — HF ships those as safetensors, not GGUF — so they come from this project's own release rather than upstream.",
+      "what": "Five LoRA adapters, not a model: answerability, citations, hallucination detection, query clarification, query rewrite. They load onto the core's weights and are selected per request, so the whole shelf costs 400 MB rather than five models.  Required: the answerability adapter gates every source the research process reads, and without it the gate fails open and the notes fill with pages that merely mention the subject. Three of the five are activated variants produced by a local conversion \u2014 HF ships those as safetensors, not GGUF \u2014 so they come from this project's own release rather than upstream.",
       "repo": "ibm-granite/granitelib-rag-r1.0",
       "files": [
         {
@@ -219,6 +219,35 @@
       "binds": [
         "forecast"
       ]
+    },
+    {
+      "id": "strudel",
+      "title": "sets",
+      "what": "Writes Strudel. A 135M SmolLM2 finetuned on the pattern language, int8 and in the page, so /dj can compose a set rather than pick one of four moods. Everything it writes is checked before it plays \u2014 the sounds must be registered, the code must evaluate against Strudel's own exports, and the pattern must produce events \u2014 because it reliably invents instrument names that sound plausible and are silent. Absent, /dj falls back to the struct in compose.ts, which cannot be wrong and cannot surprise you.",
+      "repo": "rish-0-0/SmolLM2-135M-Strudel-ONNX",
+      "files": [
+        {
+          "from": "onnx/model_quantized.onnx",
+          "to": "model_quantized.onnx"
+        },
+        "tokenizer.json",
+        "tokenizer_config.json",
+        "config.json",
+        "generation_config.json"
+      ],
+      "bytes": 140200000,
+      "runtime": "onnx",
+      "required": false,
+      "binds": [
+        "strudel"
+      ],
+      "sha256": {
+        "model_quantized.onnx": "7fb823c5de787a90b82a298841c5c37b08e36f556ebcc107af92eaf75fec473a",
+        "tokenizer.json": "bf346d64f6f0fbcefb4c1b6928a98241467dff36c6fbae5fe1785c4ff90667f4",
+        "tokenizer_config.json": "773832427c08e5eb01bfb6d06c6516e271f9cb8d0aa8b8f14fcfc747dd4ede77",
+        "config.json": "bb78c271ed36cffe8da1c24477c023e3a441058a959a0bde3bf26a14c64aa1cd",
+        "generation_config.json": "cb4f12d616cf7cb2ffb5f3f69722181ba294f6084bc3f586f49e1d2d130098cb"
+      }
     }
   ]
 }
