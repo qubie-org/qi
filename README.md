@@ -11,10 +11,10 @@
 
 **A text river with a 3B model in it, running on your own machine.**
 
-Every local-AI app is the same app: a chat window, gray bubbles, and a small
-model doing its best impression of a big one. qi is what happens when you design
-*for* the small model instead — give it real work, check everything it says, and
-let the page do things a chat window has never bothered to do.
+Small models bluff. Ask one for sources and it invents them; ask it for code
+and it invents APIs. Every serious local-AI problem is a trust problem, and qi's
+answer is structural rather than hopeful: **the model is never the authority on
+anything.** It proposes; code decides.
 
 ```
 /research    investigates a question and leaves a note, with sources
@@ -24,32 +24,29 @@ let the page do things a chat window has never bothered to do.
 @            find one of them
 ```
 
-## What it does that nothing else does
+## One rule, everywhere
 
-**Research you can audit.** Ask a question and `/research` fans out across nine
-search engines, reads the pages, and keeps only the claims whose supporting
-quote appears word-for-word in the source. If the model paraphrases, the claim
-dies. You get a note with receipts — and a footer that tells you what it threw
-away and why.
+**Generate freely, verify mechanically.** The model may write anything it
+likes. What survives is decided by plain code with no model in it — and that
+one split, applied everywhere, is the entire design. The features are just the
+places you can watch it work:
 
-**A DJ in residence.** Ask `/dj` for a deep late-night set and a
-135-million-parameter model writes actual Strudel — polyrhythm, chord voicings,
-delay lines — then plays it under your conversation. Every set is written on the
-spot; nobody has ever heard it before.
+- A research claim survives only if its supporting quote occurs word-for-word
+  in the page it cites. A paraphrase dies. The note you get has receipts, and a
+  footer saying what was discarded and why.
+- A generated set survives only if every sound it names exists, the code
+  evaluates against Strudel's real exports, and the pattern produces events.
+  The same discipline, pointed at music.
+- Colour, typography and sound are not generated at all — they are *derived*,
+  identically every time, from what the conversation means. "Ocean" is blue
+  because oceans are blue. Nothing is themed, nothing is random.
+- And when the answer is simply knowable — weather, a price, a picture — the
+  model is skipped entirely, because the fastest way to be right is not to ask.
 
-**A page that reads the room.** Colour, typography and sound all derive from
-what the conversation means. Write "ocean" and it turns blue, because oceans are
-blue. Every click and keystroke is a note in a key set by the mood of the
-thread, so the interface literally cannot play a wrong note — the only
-dissonance in the whole app is the sound of a mistake.
-
-**Text that stays in the river.** No walls of markdown. Headings, tables and
-code fences are folded back into the line before they render, so an answer reads
-like a sentence somebody wrote to you, not a document somebody generated at you.
-
-**Nothing phones home.** No account, no API key, no telemetry. The model, the
-embedder and the search adapters all run on your machine, and the only network
-traffic is the pages you asked it to read.
+Verification is cheap and specific, so the model gets a long leash exactly
+where judgement is needed and no leash at all where it is not. That is what
+lets 2 GB of weights do work you can rely on: not a smarter model — a system
+that never has to trust one.
 
 ## Try it
 
