@@ -1731,13 +1731,19 @@ body {
    middle of a wide window — the white space stopped being a margin and became
    a surround. So the column widens; display type still wants a short line, but
    short relative to the page rather than to a phone. */
-.river { max-width: 46ch }
-.turn { max-width: 46ch }
+/* Width in rem, not ch.
+   `ch` is relative to the font size, and the two kinds of turn are set at very
+   different sizes — an agent's display serif against a much smaller sans for
+   what you typed. One `ch` value therefore produced two different columns, and
+   the narrower of them set the tone. A fixed measure with a viewport cap gives
+   both the same edges, and lets the column actually use the window. */
+.river { max-width: none }
+.turn { max-width: min(58rem, 68vw) }
 /* The same measure as the river, and the same padding under it.
    Matching `max-width` was not enough: the stage insets its column with
    `clamp(1.5rem, 5vw, 5rem)` and the composer used a narrower inset of its own,
    so two boxes of identical width still centred 29px apart. A centred element
    inherits its parent's padding into where its centre lands, which is easy to
    forget precisely because the widths look equal. */
-.composer-field, .picker { max-width: 46ch }
+.composer-field, .picker { max-width: min(58rem, 68vw) }
 .composer { padding-inline: clamp(1.5rem, 5vw, 5rem) }
