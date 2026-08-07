@@ -1,5 +1,5 @@
 /**
- * Three sigils, three different kinds of thing.
+ * Two sigils, two different kinds of thing.
  *
  * The split is by *what happens when you invoke it*, because that is the only
  * distinction a person actually feels. Anything else — where it is implemented,
@@ -16,14 +16,17 @@
  *                something into it, and while it has the page there is a
  *                breadcrumb back to the conversation.
  *
- *   #  search    A question about what already exists — a concept, a cluster,
- *                a file. The odd one out, and deliberately so: the other two
- *                resolve to an entry in a registry, this one resolves to
- *                *results*. Modelling it as a third registry would have meant
- *                pretending that "everything you have ever written" is a list
- *                someone picks from.
+ * ── There were four, and the two that went are the interesting part ─────────
  *
- * ── There was a fourth, and removing it is the point ────────────────────────
+ * `#` was search: a question about what already exists — a concept, a cluster,
+ * a file. It was the odd one out and was defended on that basis, since the
+ * other two resolve to an entry in a registry and this one resolved to
+ * *results*. That is a real distinction and it was the wrong thing to spend a
+ * sigil on. Finding something you already have is what `@` does; splitting
+ * "find the app" from "find the note" put the burden of knowing which kind of
+ * thing you were looking for onto the person doing the looking, before they had
+ * found it. A namespace that asks you to classify your own question is asking
+ * for the answer.
  *
  * `$` was a skill: a folder with frontmatter and a brief, loaded into the
  * agent's context when summoned, either because a person named it or because
