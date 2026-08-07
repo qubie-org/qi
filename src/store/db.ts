@@ -53,14 +53,24 @@ export type Step = {
 
 export type Recalled = { kind: 'fact' | 'note' | 'turn'; text: string; score: number; key?: string }
 
+/** A thread with nothing said in it yet. Replaced by the first turn. */
+const UNTITLED = 'new thread'
+
 const SCHEMA = `
+create table if not exists thread (
+  id      integer primary key,
+  title   text    not null,
+  created integer not null,
+  updated integer not null
+);
 create table if not exists turn (
-  id    integer primary key,
-  role  text    not null,
-  text  text    not null,
-  ts    integer not null,
-  task  integer,
-  vec   blob
+  id     integer primary key,
+  role   text    not null,
+  text   text    not null,
+  ts     integer not null,
+  task   integer,
+  thread integer,
+  vec    blob
 );
 create table if not exists fact (
   id    integer primary key,
@@ -175,14 +185,68 @@ export class Store {
 
   // ── what was said ───────────────────────────────────────────────────────
 
+  /**
+   * Which conversation is being written to.
+   *
+   * Threads are coarser than tasks: a task is one thing the agent went off and
+   * did, a thread is everything said in one sitting. Turns carry both, so the
+   * step list for a single answer and the conversation it belongs to are
+   * separate questions with separate answers.
+   */
+  thread = 0
+
   addTurn(role: Role, text: string, vec?: Float32Array): number {
-    return this.run('insert into turn (role, text, ts, task, vec) values (?,?,?,?,?)', [
+    if (!this.thread) this.thread = this.openThread()
+    const id = this.run('insert into turn (role, text, ts, task, thread, vec) values (?,?,?,?,?,?)', [
       role,
       text,
       Date.now(),
       this.task,
+      this.thread,
       vec ? toBlob(vec) : null,
     ])
+    // The title is the first thing said in it, and `updated` is what orders the
+    // history — a thread you returned to yesterday should sit above one you
+    // abandoned last week.
+    this.run('update thread set updated = ?, title = case when title = ? then ? else title end where id = ?', [
+      Date.now(),
+      UNTITLED,
+      text.slice(0, 80),
+      this.thread,
+    ])
+    return id
+  }
+
+  /** Start a conversation and make it the current one. */
+  openThread(title = UNTITLED): number {
+    const now = Date.now()
+    this.thread = this.run('insert into thread (title, created, updated) values (?,?,?)', [title, now, now])
+    return this.thread
+  }
+
+  /** Every conversation, most recently touched first. */
+  threads(): { id: number; title: string; updated: number; turns: number }[] {
+    return this.query(`
+      select t.id, t.title, t.updated, count(u.id) as turns
+      from thread t left join turn u on u.thread = t.id
+      group by t.id order by t.updated desc limit 100
+    `)
+  }
+
+  /** Everything said in one conversation, oldest first. */
+  threadTurns(id: number): { role: Role; text: string; ts: number }[] {
+    return this.query('select role, text, ts from turn where thread = ? order by id', [id])
+  }
+
+  /** Make an existing conversation the current one. */
+  resume(id: number): void {
+    this.thread = id
+  }
+
+  deleteThread(id: number): void {
+    this.run('delete from turn where thread = ?', [id])
+    this.run('delete from thread where id = ?', [id])
+    if (this.thread === id) this.thread = 0
   }
 
   /**

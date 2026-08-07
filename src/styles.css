@@ -1627,3 +1627,93 @@ body {
   letter-spacing: -.005em;
   color: var(--ink-hint);
 }
+
+/* ── threads ─────────────────────────────────────────────────────────────────
+   Two marks beside the status, not a sidebar. The app is one column and adding
+   a second to hold a list of conversations would cost more room than the list
+   is worth — so the history opens over the river and closes as soon as it is
+   used. */
+.chrome-act {
+  appearance: none;
+  border: 0;
+  background: none;
+  padding: 0 .28rem;
+  font: inherit;
+  font-size: .82rem;
+  line-height: 1;
+  color: var(--ink-hint);
+  cursor: pointer;
+  transition: color 140ms ease;
+}
+.chrome-act:hover { color: var(--ink) }
+
+.threads {
+  position: absolute;
+  top: 2.2rem;
+  right: 0;
+  z-index: 20;
+  min-width: 17rem;
+  max-height: 60vh;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  padding: .25rem;
+  background: var(--paper);
+  border: 1px solid var(--rule);
+  border-radius: .6em;
+  box-shadow:
+    0 1px 2px color-mix(in oklch, var(--ink) 5%, transparent),
+    0 8px 24px -12px color-mix(in oklch, var(--ink) 18%, transparent);
+}
+.threads-row {
+  display: flex;
+  align-items: baseline;
+  gap: .6rem;
+  width: 100%;
+  padding: .34em .5em;
+  border: 0;
+  border-radius: .4em;
+  background: none;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.threads-row:hover { background: color-mix(in oklch, var(--ink) 6%, transparent) }
+.threads-title {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: .86rem;
+  color: var(--ink);
+}
+.threads-meta { flex: 0 0 auto; font-size: .72rem; color: var(--ink-hint) }
+.threads-empty { padding: .5rem; font-size: .8rem; font-style: italic; color: var(--ink-hint) }
+
+/* ── the thread, centred ─────────────────────────────────────────────────────
+   The river was flush left at every width, which on a wide window left two
+   thirds of the screen empty to the right and made the measure look like an
+   accident rather than a choice. Centring the column fixes that without
+   touching the measure itself — 30ch is still 30ch, it is just no longer
+   pinned to one edge.
+
+   What moves inside it is only the alignment: an answer stays left-aligned
+   because that is how prose is read, and what you typed goes right, which is
+   the one place this borrows from a chat log. It earns it — with both sides
+   flush left and only weight to tell them apart, a long question and the answer
+   under it read as one block of text. */
+.stage { align-items: center }
+.turn { width: 100%; max-width: 30ch; margin-inline: auto }
+.turn-user .river { text-align: right; margin-left: auto }
+.turn-agent .river { text-align: left; margin-right: auto }
+
+/* The composer follows the thread to the middle.
+   Centring the river and leaving the input flush left made the two look like
+   they belonged to different screens — the eye reads down a centred column and
+   then has to travel to the far edge to type. The field keeps its own width,
+   because an input wants more room than 30 characters, and only its axis
+   moves. */
+.composer { align-items: center }
+.composer-field { margin-inline: auto; max-width: 46ch }
+.picker { margin-inline: auto; max-width: 46ch }

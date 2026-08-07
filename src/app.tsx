@@ -41,6 +41,8 @@ type Engine = { bank: Bank; axes: Axes; drift: Drift; router: Router; store: Sto
 
 export default function App() {
   const [turns, setTurns] = useState<Turn[]>([])
+  /** The history drawer, and what it is showing. */
+  const [history, setHistory] = useState<{ id: number; title: string; updated: number; turns: number }[] | null>(null)
   const [status, setStatus] = useState('waking')
   const [quiet, setQuiet] = useState(isMuted())
   /** Bumped to re-read what is running; the chrome polls nothing. */
@@ -548,6 +550,42 @@ export default function App() {
         <i className="lamp lamp--4" />
       </div>
       <div className="chrome">
+        {/* A new conversation, and the ones before it.
+            Beside the status rather than in a sidebar: the app has one column
+            and adding a second to hold a list would cost more than the list is
+            worth. The drawer opens over the river and closes on choosing. */}
+        <button
+          type="button"
+          className="chrome-act"
+          title="new thread"
+          aria-label="new thread"
+          onClick={() => {
+            sound('mode')
+            engine.current?.store.openThread()
+            setTurns([])
+            setHistory(null)
+          }}
+        >
+          +
+        </button>
+        <button
+          type="button"
+          className="chrome-act"
+          title="past threads"
+          aria-label="past threads"
+          onClick={() => {
+            sound(history ? 'unmode' : 'mode')
+            // Only open once there is a store to ask. Before that the list
+            // came back empty and the drawer said "nothing yet", which is a
+            // claim about your history made without reading it.
+            if (history) return setHistory(null)
+            const store = engine.current?.store
+            if (store) setHistory(store.threads())
+          }}
+        >
+          ⏱
+        </button>
+
         {/* Anything still running. A command that keeps going after it returns
             has to be stoppable from outside the sentence that started it —
             otherwise the only way to end it is to remember the exact words,
@@ -641,6 +679,44 @@ export default function App() {
         {turns.length === 0 && !live && (
           <div className="turn turn-agent">
             <River nodes={parse('say something. the page will follow.')} />
+          </div>
+        )}
+        {/* Past conversations, over the river rather than beside it.
+            Choosing one replays its turns as plain text — the typography and
+            colour of a turn are derived from the sentence, so they rebuild
+            themselves; what is not rebuilt is the step list, which belonged to
+            a run that has finished and would be a fiction to show again. */}
+        {history && (
+          <div className="threads" role="listbox">
+            {history.length === 0 && <div className="threads-empty">nothing yet</div>}
+            {history.map((h) => (
+              <button
+                key={h.id}
+                type="button"
+                role="option"
+                aria-selected={false}
+                className="threads-row"
+                onMouseDown={(ev) => {
+                  ev.preventDefault()
+                  const store = engine.current?.store
+                  if (!store) return
+                  sound('open')
+                  store.resume(h.id)
+                  setTurns(
+                    store.threadTurns(h.id).map((t) => ({
+                      role: t.role as 'user' | 'agent',
+                      text: t.text,
+                      nodes: parse(t.text),
+                      vibe: NEUTRAL,
+                    })),
+                  )
+                  setHistory(null)
+                }}
+              >
+                <span className="threads-title">{h.title}</span>
+                <span className="threads-meta">{h.turns} turn{h.turns === 1 ? '' : 's'}</span>
+              </button>
+            ))}
           </div>
         )}
         {turns.map((t, i) => (
