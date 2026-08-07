@@ -9,58 +9,56 @@
 [![node >=20](https://img.shields.io/badge/node-%3E%3D20-3c873a)](https://nodejs.org)
 [![platform macOS Apple silicon](https://img.shields.io/badge/platform-macOS%20%C2%B7%20Apple%20silicon-555)](#requirements)
 
-**A text river with a 3B model in it, running on your own machine.**
+**A little AI, and everything it needs to be good company, living together in
+about 3 GB on your Mac.**
 
-Small models bluff. Ask one for sources and it invents them; ask it for code
-and it invents APIs. Every serious local-AI problem is a trust problem, and qi's
-answer is structural rather than hopeful: **the model is never the authority on
-anything.** It proposes; code decides.
+qi is a fun experiment.
+
+Take an AI small enough to live on a laptop — no cloud, no account, no key —
+and build a little world around it: a harness that keeps it honest, and a page
+that plays along.
+
+Because here is the thing about small AIs: they are eager, and they make
+things up.
+
+So qi never takes its word for anything.
+
+When it researches something, every quote has to actually appear in the page it
+came from. If it made one up, the quote gets thrown out before you ever see it.
+
+When it writes music — yes, it writes music — the song has to actually play.
+Every sound is checked before you hear it.
+
+And the page itself joins in. Write "ocean" and the word turns blue, because
+oceans are blue. Every click and keystroke is a note in a key set by the mood
+of the conversation, so the whole app sounds like one instrument that cannot
+hit a wrong note.
 
 ```
-/research    investigates a question and leaves a note, with sources
-/present     the same, laid out as slides that carry their citations
-/dj          writes a Strudel set and puts it on underneath
+/research    looks something up properly, leaves a note with sources
+/present     the same, laid out as slides
+/dj          writes a song and plays it underneath
 /note /deck  the things you have made
 @            find one of them
 ```
 
-## One rule, everywhere
+The model, its helpers, the checking, the page — all of it fits in about 3 GB
+and runs entirely on your machine.
 
-**Generate freely, verify mechanically.** The model may write anything it
-likes. What survives is decided by plain code with no model in it — and that
-one split, applied everywhere, is the entire design. The features are just the
-places you can watch it work:
-
-- A research claim survives only if its supporting quote occurs word-for-word
-  in the page it cites. A paraphrase dies. The note you get has receipts, and a
-  footer saying what was discarded and why.
-- A generated set survives only if every sound it names exists, the code
-  evaluates against Strudel's real exports, and the pattern produces events.
-  The same discipline, pointed at music.
-- Colour, typography and sound are not generated at all — they are *derived*,
-  identically every time, from what the conversation means. "Ocean" is blue
-  because oceans are blue. Nothing is themed, nothing is random.
-- And when the answer is simply knowable — weather, a price, a picture — the
-  model is skipped entirely, because the fastest way to be right is not to ask.
-
-Verification is cheap and specific, so the model gets a long leash exactly
-where judgement is needed and no leash at all where it is not. That is what
-lets 2 GB of weights do work you can rely on: not a smarter model — a system
-that never has to trust one.
+Nothing you type ever leaves it.
 
 ## Try it
 
 ```sh
 npx @qi-ui/cli setup     # one question: which size
-npx @qi-ui/cli run       # starts the model, opens the page
+npx @qi-ui/cli run       # starts everything, opens the page
 ```
 
 Or take the Mac app from [releases](https://github.com/qubie-org/qi/releases) —
-it carries its own model server, and keeps the weights and your conversations in
-Application Support at paths you can find and copy.
+one bundle, batteries included.
 
-Two sizes: `3b` is the one everything here was measured against and the right
-default, and `8b` gives better answers if you have the memory for it.
+Two sizes: `3b` is the friendly default, `8b` answers better if your Mac has
+the memory for it.
 
 ## How a turn works
 
